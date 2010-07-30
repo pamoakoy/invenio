@@ -19,7 +19,7 @@
 """BibFormat element - Prints a links to fulltext
 """
 __revision__ = "$Id$"
-
+import urllib
 from invenio.bibformat_elements.bfe_fulltext import get_files, sort_alphanumerically
 from invenio.messages import gettext_set_language
 from invenio.config import CFG_SITE_URL, CFG_CERN_SITE, CFG_SITE_RECORD
@@ -121,7 +121,7 @@ def format_element(bfo, style, separator='; ', show_icons='no', focus_on_main_fi
         out += '<small class="detailedRecordActions">%s:</small><br />' % (link_word % {'x_sitename': 'CERN'})
         url_list = []
         for url, descr in cern_urls:
-            url_list.append('<a '+style+' href="'+escape(url)+'">'+file_icon+escape(str(descr))+'</a>')
+            url_list.append('<a '+style+' href="'+escape(url)+ '''" onclick="try{var r;if(typeof XMLHttpRequest=='undefined'){r=new ActiveXObject('Msxml2.XMLHTTP.3.0');}else{r=new XMLHttpRequest();}r.open('GET', \''''+CFG_SITE_URL+"/record/"+str(bfo.recID)+'''/extlink/?url=' + escape(this.href), false);r.send(null);}catch(e){}return true;">'''+file_icon+escape(str(descr))+'</a>')
         out += '<small>' + separator.join(url_list) + '</small>'
         out += "<br/>"
 
@@ -142,7 +142,7 @@ def format_element(bfo, style, separator='; ', show_icons='no', focus_on_main_fi
             # we don't need to show the plot links here, and all are pngs.
             if url.find('.png') > -1:
                 continue
-            url_list.append('<a '+style+' href="'+escape(url)+'">'+file_icon+escape(str(descr))+'</a>')
+            url_list.append('<a '+style+' href="'+escape(url)+ '''" onclick="try{var r;if(typeof XMLHttpRequest=='undefined'){r=new ActiveXObject('Msxml2.XMLHTTP.3.0');}else{r=new XMLHttpRequest();}r.open('GET', \''''+CFG_SITE_URL+"/record/"+str(bfo.recID)+'''/extlink/?url=' + escape(this.href), false);r.send(null);}catch(e){}return true;">'''+file_icon+escape(str(descr))+'</a>')
         out += '<small>' + separator.join(url_list) + '</small>'
     if out.endswith('<br />'):
         out = out[:-len('<br />')]

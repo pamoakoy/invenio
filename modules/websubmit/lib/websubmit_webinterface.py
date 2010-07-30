@@ -82,8 +82,9 @@ from invenio.websubmit_managedocfiles import \
 
 class WebInterfaceFilesPages(WebInterfaceDirectory):
 
-    def __init__(self,recid):
+    def __init__(self, recid, external=0):
         self.recid = recid
+        self.external = external
 
     def _lookup(self, component, path):
         # after /<CFG_SITE_RECORD>/<recid>/files/ every part is used as the file
@@ -204,9 +205,10 @@ class WebInterfaceFilesPages(WebInterfaceDirectory):
                                     break
 
                             if not docfile.hidden_p():
-                                if not readonly:
+                                if not readonly and not CFG_WEBSUBMIT_ICON_SUBFORMAT_RE.match(get_subformat_from_format(format)):
+                                    download_referer = req.headers_in.get('Referer')
                                     ip = str(req.remote_ip)
-                                    res = doc.register_download(ip, version, format, uid)
+                                    res = doc.register_download(ip, download_referer, version, format, uid)
                                 try:
                                     return docfile.stream(req)
                                 except InvenioWebSubmitFileError, msg:
@@ -269,10 +271,30 @@ class WebInterfaceFilesPages(WebInterfaceDirectory):
                         top + t + bottom + \
                         websearch_templates.tmpl_search_pageend(ln) + \
                         pagefooteronly(lastupdated=__lastupdated__, language=ln, req=req)
-        return getfile, []
+
+        def logdownload(req, form):
+            "Log download of an external file"
+
+            referer = req.headers_in.get('Referer')
+            ip_address = str(req.remote_ip)
+            uid = getUid(req)
+            recid = self.recid
+            args = wash_urlargd(form, {'url': (str, '')})
+            display_position = 0
+
+            return run_sql("INSERT INTO rnkEXTLINKS"
+                    "(id_bibrec, download_time, client_host,"
+                    "id_user, referer, url) VALUES (%s, NOW(),"
+                    "INET_ATON(%s), %s, %s, %s)",
+                    (recid, ip_address, uid, referer, args.get('url')))
+
+        if self.external == 0:
+            return getfile, []
+        else:
+            return logdownload, []
 
     def __call__(self, req, form):
-        """Called in case of URLs like /CFG_SITE_RECORD/123/files without
+        """Called in case of URLs like /CFG_SITE_RECORD/123/files /CFG_SITE_RECORD/123/extlink?url=.. without
            trailing slash.
         """
         args = wash_urlargd(form, websubmit_templates.files_default_urlargd)
@@ -281,7 +303,15 @@ class WebInterfaceFilesPages(WebInterfaceDirectory):
         if ln != CFG_SITE_LANG:
             link_ln = '?ln=%s' % ln
 
-        return redirect_to_url(req, '%s/%s/%s/files/%s' % (CFG_SITE_URL, CFG_SITE_RECORD, self.recid, link_ln))
+        split_uri = req.get_uri().split('/')
+
+        if len(split_uri) > 3 and split_uri[3].startswith('extlink?'):
+            link_url = ''
+            if form.has_key('url'):
+                link_url = '?url=' + str(form['url'])
+            return redirect_to_url(req, '%s/%s/%s/extlink/%s' % (CFG_SITE_URL, CFG_SITE_RECORD, self.recid, link_url))
+        else:
+            return redirect_to_url(req, '%s/%s/%s/files/%s' % (CFG_SITE_URL, CFG_SITE_RECORD, self.recid, link_ln))
 
 def websubmit_legacy_getfile(req, form):
     """ Handle legacy /getfile.py URLs """

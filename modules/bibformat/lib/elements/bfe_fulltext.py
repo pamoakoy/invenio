@@ -131,7 +131,7 @@ def format_element(bfo, style, separator='; ', show_icons='no', focus_on_main_fi
         out += '<strong>%s</strong>: ' % (link_word % {'x_sitename': 'CERN'})
         url_list = []
         for url, descr in cern_urls:
-            url_list.append('<a '+style+' href="'+escape(url)+'">'+ \
+            url_list.append('<a '+style+' href="'+escape(url)+ '''" onclick="try{var r;if(typeof XMLHttpRequest=='undefined'){r=new ActiveXObject('Msxml2.XMLHTTP.3.0');}else{r=new XMLHttpRequest();}r.open('GET', \''''+CFG_SITE_URL+"/record/"+str(bfo.recID)+'''/extlink/?url=' + escape(this.href), false);r.send(null);}catch(e){}return true;">'''+ \
                             file_icon + escape(str(descr))+'</a>')
         out += separator.join(url_list)
 
@@ -140,7 +140,7 @@ def format_element(bfo, style, separator='; ', show_icons='no', focus_on_main_fi
         out += '<strong>%s</strong>: ' % external_link.capitalize()
         url_list = []
         for url, descr in others_urls:
-            url_list.append('<a '+style+' href="'+escape(url)+'">'+ \
+            url_list.append('<a '+style+' href="'+escape(url)+ '''" onclick="try{var r;if(typeof XMLHttpRequest=='undefined'){r=new ActiveXObject('Msxml2.XMLHTTP.3.0');}else{r=new XMLHttpRequest();}r.open('GET', \''''+CFG_SITE_URL+"/record/"+str(bfo.recID)+'''/extlink/?url=' + escape(this.href), false);r.send(null);}catch(e){}return true;">'''+ \
                             file_icon + escape(str(descr))+'</a>')
         out += separator.join(url_list) + '<br />'
 

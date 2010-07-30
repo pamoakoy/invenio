@@ -987,7 +987,7 @@ class WebInterfaceRecordPages(WebInterfaceDirectory):
 
     _exports = ['', 'files', 'reviews', 'comments', 'usage',
                 'references', 'export', 'citations', 'holdings', 'edit',
-                'keywords', 'multiedit', 'merge', 'plots']
+                'keywords', 'multiedit', 'merge', 'plots', 'extlink']
 
     #_exports.extend(output_formats)
 
@@ -1008,6 +1008,7 @@ class WebInterfaceRecordPages(WebInterfaceDirectory):
         self.export = WebInterfaceRecordExport(self.recid, self.format)
         self.edit = WebInterfaceEditPages(self.recid)
         self.merge = WebInterfaceMergePages(self.recid)
+        self.extlink = WebInterfaceFilesPages(self.recid, external=1)
 
         return
 
@@ -1064,7 +1065,7 @@ class WebInterfaceRecordRestrictedPages(WebInterfaceDirectory):
 
     _exports = ['', 'files', 'reviews', 'comments', 'usage',
                 'references', 'export', 'citations', 'holdings', 'edit',
-                'keywords', 'multiedit', 'merge', 'plots']
+                'keywords', 'multiedit', 'merge', 'plots', 'extlink']
 
     #_exports.extend(output_formats)
 
@@ -1085,6 +1086,7 @@ class WebInterfaceRecordRestrictedPages(WebInterfaceDirectory):
         self.export = WebInterfaceRecordExport(self.recid, self.format)
         self.edit = WebInterfaceEditPages(self.recid)
         self.merge = WebInterfaceMergePages(self.recid)
+        self.extlink = WebInterfaceFilesPages(self.recid, external=1)
 
         return
 
@@ -1444,7 +1446,7 @@ class WebInterfaceSearchInterfacePages(WebInterfaceDirectory):
             try:
                 if path[1] in ['', 'files', 'reviews', 'comments', 'usage',
                                'references', 'citations', 'holdings', 'edit',
-                               'keywords', 'multiedit', 'merge', 'plots']:
+                               'keywords', 'multiedit', 'merge', 'plots', 'extlink']:
                     tab = path[1]
                 elif path[1] == 'export':
                     tab = ''

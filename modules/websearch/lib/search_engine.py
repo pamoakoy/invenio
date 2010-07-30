@@ -37,6 +37,7 @@ import urllib
 import urlparse
 import zlib
 import sys
+import cPickle
 
 if sys.hexversion < 0x2040000:
     # pylint: disable=W0622
@@ -71,8 +72,8 @@ from invenio.config import \
      CFG_ACCESS_CONTROL_LEVEL_ACCOUNTS, \
      CFG_BIBRANK_SHOW_CITATION_LINKS, \
      CFG_SOLR_URL, \
-     CFG_SITE_RECORD
-
+     CFG_SITE_RECORD, \
+     CFG_WEBSEARCH_DRANK_LOG_EXTRA_RECORDS
 from invenio.search_engine_config import InvenioWebSearchUnknownCollectionError, InvenioWebSearchWildcardLimitError
 from invenio.bibrecord import create_record, record_get_field_instances
 from invenio.bibrank_record_sorter import get_bibrank_methods, rank_records, is_method_valid
@@ -3602,14 +3603,24 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
     only for proper linking purposes: e.g. when a certain ranking
     method or a certain sort field was selected, keep it selected in
     any dynamic search links that may be printed.
+
+    If output format is hb, returns record ids of printed documents +
+    as many records is as defined in the CFG_WEBSEARCH_DRANK_LOG_EXTRA_RECORDS.
+    If output format is not hb, empty lists are returned except cases when
+    output format is XML or excel, in that case only printed record ids
+    are returned and empty list for additional records.
     """
 
     # load the right message language
     _ = gettext_set_language(ln)
 
+    #logging res is returned with printed and extra record ids
+    logging_res = [[], []]
+    recids_to_log = []
+
     # sanity checking:
     if req is None:
-        return
+        return logging_res
 
     # get user_info (for formatting based on user)
     if isinstance(req, cStringIO.OutputType):
@@ -3632,10 +3643,14 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
         # will print records from irec_max to irec_min excluded:
         irec_max = nb_found - jrec
         irec_min = nb_found - jrec - rg
+        extra_irec_min = irec_min - CFG_WEBSEARCH_DRANK_LOG_EXTRA_RECORDS
+        extra_irec_max = irec_min
         if irec_min < 0:
             irec_min = -1
+            extra_irec_min = -1
         if irec_max >= nb_found:
             irec_max = nb_found - 1
+            extra_irec_max = nb_found - 1
 
         #req.write("%s:%d-%d" % (recIDs, irec_min, irec_max))
 
@@ -3658,7 +3673,7 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
             # print footer if needed
             if print_records_epilogue_p:
                 print_records_epilogue(req, format)
-
+            logging_res = [recIDs_to_print, []]
         elif format.startswith('t') or str(format[0:3]).isdigit():
             # we are doing plain text output:
             for irec in range(irec_max, irec_min, -1):
@@ -3667,9 +3682,11 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
                 req.write(x)
                 if x:
                     req.write('\n')
+            logging_res = [[], []]
         elif format == 'excel':
             recIDs_to_print = [recIDs[x] for x in range(irec_max, irec_min, -1)]
             create_excel(recIDs=recIDs_to_print, req=req, ln=ln, ot=ot)
+            logging_res = [recIDs_to_print, []]
         else:
             # we are doing HTML output:
             if format == 'hp' or format.startswith("hb_") or format.startswith("hd_"):
@@ -3690,9 +3707,11 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
                             display_add_to_basket = False
                 req.write(websearch_templates.tmpl_record_format_htmlbrief_header(
                     ln = ln))
+                extra_recids_to_log = recIDs[extra_irec_max:extra_irec_min:-1]
                 for irec in range(irec_max, irec_min, -1):
                     row_number = jrec+irec_max-irec
                     recid = recIDs[irec]
+                    recids_to_log.append(recIDs[irec])
                     if relevances and relevances[irec]:
                         relevance = relevances[irec]
                     else:
@@ -3714,7 +3733,7 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
                 req.write(websearch_templates.tmpl_record_format_htmlbrief_footer(
                     ln = ln,
                     display_add_to_basket = display_add_to_basket))
-
+                logging_res = [recids_to_log, extra_recids_to_log]
             elif format.startswith("hd"):
                 # HTML detailed format:
                 for irec in range(irec_max, irec_min, -1):
@@ -3938,6 +3957,7 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
                                                                                     files=files,
                                                                                     reviews=reviews,
                                                                                     actions=actions))
+                logging_res = [[], []]
             else:
                 # Other formats
                 for irec in range(irec_max, irec_min, -1):
@@ -3945,9 +3965,12 @@ def print_records(req, recIDs, jrec=1, rg=10, format='hb', ot='', ln=CFG_SITE_LA
                                            search_pattern=search_pattern,
                                            user_info=user_info, verbose=verbose,
                                            sf=sf, so=so, sp=sp, rm=rm))
+                logging_res = [[], []]
 
     else:
         print_warning(req, _("Use different search terms."))
+        logging_res = [[], []]
+    return logging_res
 
 def print_records_prologue(req, format, cc=None):
     """
@@ -4398,7 +4421,8 @@ def call_bibformat(recID, format="HD", ln=CFG_SITE_LANG, search_pattern=None, us
 
     return out
 
-def log_query(hostname, query_args, uid=-1):
+def log_query(hostname, ip_address, query_args, referer, uid=-1, recids_to_log=None):
+#def log_query(hostname, query_args, uid=-1):
     """
     Log query into the query and user_query tables.
     Return id_query or None in case of problems.
@@ -4412,9 +4436,9 @@ def log_query(hostname, query_args, uid=-1):
         except:
             id_query = run_sql("INSERT INTO query (type, urlargs) VALUES ('r', %s)", (query_args,))
         if id_query:
-            run_sql("INSERT INTO user_query (id_user, id_query, hostname, date) VALUES (%s, %s, %s, %s)",
+            run_sql("INSERT INTO user_query (id_user, id_query, hostname, date, reclist, referer, client_host) VALUES (%s, %s, %s, %s, %s, %s, INET_ATON(%s))",
                     (uid, id_query, hostname,
-                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), zlib.compress(cPickle.dumps(recids_to_log)), referer, ip_address))
     return id_query
 
 def log_query_info(action, p, f, colls, nb_records_found_total=-1):
@@ -4700,6 +4724,8 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
         uid = getUid(req)
     except:
         uid = 0
+
+    view_referer = ""
     ## 0 - start output
     if recid >= 0: # recid can be 0 if deduced from sysno and if such sysno does not exist
         ## 1 - detailed record display
@@ -4720,7 +4746,9 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
                 print_records(req, range(recid, recidb), -1, -9999, of, ot, ln, search_pattern=p, verbose=verbose, tab=tab, sf=sf, so=so, sp=sp, rm=rm)
             if req and of.startswith("h"): # register detailed record page view event
                 client_ip_address = str(req.remote_ip)
-                register_page_view_event(recid, uid, client_ip_address)
+                #view_referer = str(cgi.parse_qs(req.headers_in.get('Referer')))
+                view_referer = req.headers_in.get('Referer')
+                register_page_view_event(recid, uid, client_ip_address, view_referer)
         else: # record does not exist
             if of == "id":
                 return []
@@ -4810,7 +4838,6 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
                     # Print empty, but valid XML
                     print_records_prologue(req, of)
                     print_records_epilogue(req, of)
-
     elif p.startswith("cocitedwith:"):  #WAS EXPERIMENTAL
         ## 3-terter - cited by search needed
         page_start(req, of, cc, aas, ln, uid, _("Search Results"), p=create_page_title_search_pattern_info(p, p1, p2, p3))
@@ -5007,7 +5034,6 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
             search_results_cache.cache[query_representation_in_cache] = results_in_any_collection
             if verbose and of.startswith("h"):
                 print_warning(req, "Search stage 3: storing query results in cache.")
-
         # search stage 4: intersection with collection universe:
         try:
             # added the display_nearest_terms_box parameter to avoid printing out the "Nearest terms in any collection"
@@ -5190,6 +5216,7 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
                 if len(colls_to_search)>1:
                     cpu_time = -1 # we do not want to have search time printed on each collection
                 print_records_prologue(req, of, cc=cc)
+                recids_to_log = []
                 for coll in colls_to_search:
                     if results_final.has_key(coll) and len(results_final[coll]):
                         if of.startswith("h"):
@@ -5216,18 +5243,20 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
                                 # rank_records failed and returned some error message to display:
                                 print_warning(req, results_final_relevances_prologue)
                                 print_warning(req, results_final_relevances_epilogue)
-                        print_records(req, results_final_recIDs, jrec, rg, of, ot, ln,
-                                      results_final_relevances,
-                                      results_final_relevances_prologue,
-                                      results_final_relevances_epilogue,
-                                      search_pattern=p,
-                                      print_records_prologue_p=False,
-                                      print_records_epilogue_p=False,
-                                      verbose=verbose,
-                                      sf=sf,
-                                      so=so,
-                                      sp=sp,
-                                      rm=rm)
+                       only_record_ids, extra_record_ids = \
+                                        print_records(req, results_final_recIDs, jrec, rg, of, ot, ln,
+                                                      results_final_relevances,
+                                                      results_final_relevances_prologue,
+                                                      results_final_relevances_epilogue,
+                                                      search_pattern=p,
+                                                      print_records_prologue_p=False,
+                                                      print_records_epilogue_p=False,
+                                                      verbose=verbose,
+                                                      sf=sf,
+                                                      so=so,
+                                                      sp=sp,
+                                                      rm=rm)
+                        recids_to_log.append((coll, only_record_ids, extra_record_ids))
                         if of.startswith("h"):
                             req.write(print_search_info(p, f, sf, so, sp, rm, of, ot, coll, results_final_nb[coll],
                                                         jrec, rg, aas, ln, p1, p2, p3, f1, f2, f3, m1, m2, m3, op1, op2,
@@ -5299,10 +5328,11 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
                 print_records_epilogue(req, of)
                 if f == "author" and of.startswith("h"):
                     req.write(create_similarly_named_authors_link_box(p, ln))
-
             # log query:
             try:
-                id_query = log_query(req.remote_host, req.args, uid)
+                referer = req.headers_in.get('Referer')
+                ip_address = str(req.remote_ip)
+                id_query = log_query(req.remote_host, ip_address, req.args, referer, uid, recids_to_log)
                 if of.startswith("h") and id_query:
                     if not of in ['hcs']:
                         # display alert/RSS teaser for non-summary formats:
