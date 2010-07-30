@@ -2539,18 +2539,18 @@ class BibDoc:
         """Return the total number of files."""
         return len(self.docfiles)
 
-    def register_download(self, ip_address, version, format, userid=0):
+    def register_download(self, ip_address, download_referer, version, format, userid=0):
         """Register the information about a download of a particular file."""
         format = normalize_format(format)
         if format[:1] == '.':
             format = format[1:]
         format = format.upper()
         return run_sql("INSERT INTO rnkDOWNLOADS "
-            "(id_bibrec,id_bibdoc,file_version,file_format,"
+            "(id_bibrec,id_bibdoc, referer, file_version,file_format,"
             "id_user,client_host,download_time) VALUES "
-            "(%s,%s,%s,%s,%s,INET_ATON(%s),NOW())",
-            (self.recid, self.id, version, format,
-            userid, ip_address,))
+            "(%s,%s,%s,%s,%s,%s,INET_ATON(%s),NOW())",
+            (self.recid, self.id, download_referer, version, format,
+            userid, ip_address))
 
 class BibDocFile:
     """This class represents a physical file in the Invenio filesystem.

@@ -61,5 +61,9 @@ collection and in a single record. Explains how the ranking data is calculated.<
 <dt><a href="bibrank-api">Bibrank Record Sorter API</a>
 <dd>How to call the Bibrank Record Sorter library from your python programs if necessary.</dd></dt>
 <dt><a href="bibrank-bibrankgkb">Create knowledgebase files (bibrankgkb)</a> <dd>Explains how to create knowledgebase files using the bibrankgkb tool</dd></dt>
+
+<dt><a href="bibrank-query-analyzer">BibRank Query Analyzer</a>
+<dd>Generally describes Query Analyzer's work-flow. Explains how Query Analyzer can be configured and run.</dd>
+</dt>
 </dl>
 </blockquote>

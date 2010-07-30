@@ -640,6 +640,7 @@ AC_CONFIG_FILES([config.nice  \
      modules/bibrank/bin/Makefile \
      modules/bibrank/bin/bibrank \
      modules/bibrank/bin/bibrankgkb \
+     modules/bibrank/bin/queryanalyzer \
      modules/bibrank/doc/Makefile \
      modules/bibrank/doc/admin/Makefile \
      modules/bibrank/doc/hacking/Makefile \

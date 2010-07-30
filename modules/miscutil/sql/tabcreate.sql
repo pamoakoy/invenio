@@ -2548,8 +2548,12 @@ CREATE TABLE IF NOT EXISTS rnkAUTHORDATA (
 CREATE TABLE IF NOT EXISTS rnkPAGEVIEWS (
   id_bibrec mediumint(8) unsigned default NULL,
   id_user int(15) unsigned default '0',
-  client_host int(10) unsigned default NULL,
+  client_host int(10) unsigned default NULL, INDEX(client_host),
   view_time datetime default '0000-00-00 00:00:00',
+  referer text default NULL,
+  display_position mediumint(8) unsigned default '0',
+  view_delay time default NULL,
+  id_query int(15) unsigned NOT NULL default '0',
   KEY view_time (view_time),
   KEY id_bibrec (id_bibrec)
 ) TYPE=MyISAM;
@@ -2557,11 +2561,43 @@ CREATE TABLE IF NOT EXISTS rnkPAGEVIEWS (
 CREATE TABLE IF NOT EXISTS rnkDOWNLOADS (
   id_bibrec mediumint(8) unsigned default NULL,
   download_time datetime default '0000-00-00 00:00:00',
-  client_host int(10) unsigned default NULL,
+  client_host int(10) unsigned default NULL, INDEX(client_host),
   id_user int(15) unsigned default NULL,
   id_bibdoc mediumint(9) unsigned default NULL,
   file_version smallint(2) unsigned default NULL,
   file_format varchar(10) NULL default NULL,
+  referer text default NULL,
+  display_position mediumint(8) unsigned default '0',
+  download_delay time default NULL,
+  id_query int(15) unsigned NOT NULL default '0',
+  KEY download_time (download_time),
+  KEY id_bibrec (id_bibrec)
+) TYPE=MyISAM;
+
+CREATE TABLE IF NOT EXISTS rnkUSAGEDATA (
+  id_bibrec mediumint(8) unsigned default NULL,
+  nbr_pageviews integer default '0',
+  nbr_downloads integer default '0',
+  nbr_seens integer default '0',
+  nbr_displays integer default '0',
+  nbr_pageviews_decayed float default '0',
+  nbr_downloads_decayed float default '0',
+  nbr_seens_decayed float default '0',
+  nbr_displays_decayed float default '0',
+  time_stamp datetime default '0000-00-00 00:00:00',
+  PRIMARY KEY id_bibrec (id_bibrec)
+) TYPE=MyISAM;
+
+CREATE TABLE IF NOT EXISTS rnkEXTLINKS (
+  id_bibrec mediumint(8) unsigned default NULL,
+  download_time datetime default '0000-00-00 00:00:00',
+  client_host integer unsigned default NULL, INDEX(client_host),
+  id_user int(15) unsigned default NULL,
+  referer text default NULL,
+  display_position mediumint(8) unsigned default '0',
+  url text default NULL,
+  download_delay time default NULL,
+  id_query int(15) unsigned NOT NULL default '0',
   KEY download_time (download_time),
   KEY id_bibrec (id_bibrec)
 ) TYPE=MyISAM;
@@ -2957,6 +2993,9 @@ CREATE TABLE IF NOT EXISTS user_query (
   id_query int(15) unsigned NOT NULL default '0',
   hostname varchar(50) default 'unknown host',
   date datetime default NULL,
+  reclist blob default NULL,
+  referer text default NULL,
+  client_host integer default NULL,
   KEY id_user (id_user,id_query)
 ) TYPE=MyISAM;
 

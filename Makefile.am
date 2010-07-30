@@ -505,5 +505,18 @@ update-v0.99.3-tables:
 	migrate_comments_populate_threads_index()' | $(PYTHON)
 	echo -e 'from invenio.access_control_firerole import repair_role_definitions;\
 	repair_role_definitions()' | $(PYTHON)
+	echo "ALTER TABLE user_query ADD COLUMN reclist BLOB DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkPAGEVIEWS ADD COLUMN referer TEXT DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkDOWNLOADS ADD COLUMN referer TEXT DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE user_query ADD COLUMN referer TEXT DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkDOWNLOADS ADD COLUMN display_position MEDIUMINT UNSIGNED NOT NULL DEFAULT '0';" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkPAGEVIEWS ADD COLUMN display_position MEDIUMINT UNSIGNED NOT NULL DEFAULT '0';" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE user_query ADD COLUMN client_host INTEGER  DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkPAGEVIEWS ADD COLUMN view_delay TIME DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkDOWNLOADS ADD COLUMN download_delay TIME DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "CREATE INDEX rnkPAGEVIEWS_client_host_index ON rnkPAGEVIEWS(client_host);" | ${prefix}/bin/dbexec
+	echo "CREATE INDEX rnkDOWNLOADS_client_host_index ON rnkDOWNLOADS(client_host);" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkDOWNLOADS ADD COLUMN id_query INT(15) UNSIGNED NOT NULL DEFAULT '0';" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE rnkPAGEVIEWS ADD COLUMN id_query INT(15) UNSIGNED NOT NULL DEFAULT '0';" | ${prefix}/bin/dbexec
 
 CLEANFILES = *~ *.pyc *.tmp
