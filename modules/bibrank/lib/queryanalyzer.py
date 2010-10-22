@@ -35,7 +35,8 @@ from invenio.bibtask import task_init, write_message, task_set_option, \
 from invenio.config import CFG_BIBRANK_DRANK_POSTPROCESSING_TIME_WINDOW
 from invenio.config import CFG_SITE_URL, CFG_SITE_SECURE_URL, CFG_CACHEDIR
 
-# Update of the seens will happen from the "time_limit" time up to the current time
+# Update of the seens will happen from the "from_date" time up to the
+# current time
 current_time = datetime.datetime.now()
 last_run_time_file = os.path.join(CFG_CACHEDIR, 'queryanalyzer_runtime')
 
@@ -47,21 +48,22 @@ def get_last_runtime():
     return last_runtime
 
 if os.path.isfile(last_run_time_file):
-    time_limit = get_last_runtime()
+    last_runtime = get_last_runtime()
 else:
+    # Never run this tool? Start analyzing from last year...
+    last_runtime = current_time - datetime.timedelta(days = 365)
     last_run_file = open(last_run_time_file, 'w')
-    cPickle.dump(current_time, last_run_file)
+    cPickle.dump(last_runtime, last_run_file)
     last_run_file.close()
-    time_limit = current_time - datetime.timedelta(days = 7)
 
 def _dbdump_elaborate_submit_param(key, value, dummyopts, dummyargs):
     """
     Elaborate task submission parameter.  See bibtask's
     task_submit_elaborate_specific_parameter_fnc for help.
     """
-    if key in ('-r', '--rnkUD_dump'):
+    if key in ('-r', '--rnkUD-dump'):
         try:
-            task_set_option('rnkUD_dump', value)
+            task_set_option('rnkUD-dump', value)
         except ValueError:
             raise StandardError, "ERROR: Input '%s' is not valid." % \
                   value
@@ -83,15 +85,28 @@ def _dbdump_elaborate_submit_param(key, value, dummyopts, dummyargs):
         except ValueError:
             raise StandardError, "ERROR: Input '%s' is not valid." % \
                   value
-    elif key in ('-q', '--user_query'):
+    elif key in ('-q', '--user-query'):
         try:
-            task_set_option('user_query', bool(value))
+            task_set_option('user-query', bool(value))
         except ValueError:
             raise StandardError, "ERROR: Input '%s' is not valid." % \
                   value
-    elif key in ('-w', '--wrd_sim'):
+    elif key in ('-w', '--wrd-sim'):
         try:
-            task_set_option('wrd_sim', bool(value))
+            task_set_option('wrd-sim', bool(value))
+        except ValueError:
+            raise StandardError, "ERROR: Input '%s' is not valid." % \
+                  value
+    elif key == '--site-url':
+        try:
+            task_set_option('site-url', value)
+        except ValueError:
+            raise StandardError, "ERROR: Input '%s' is not valid." % \
+                  value
+    elif key == '--until':
+        try:
+            until_date = datetime.datetime.strptime(value, '%Y-%m-%d')
+            task_set_option('until', until_date)
         except ValueError:
             raise StandardError, "ERROR: Input '%s' is not valid." % \
                   value
@@ -99,7 +114,7 @@ def _dbdump_elaborate_submit_param(key, value, dummyopts, dummyargs):
         return False
     return True
 
-def dump_bibrec(dump_folder, bibrec_dump, dump_type):
+def dump_bibrec(dump_folder, bibrec_dump, dump_type="sql"):
     """Dumping bibrec"""
 
     dump_bibrec_folder = dump_folder + 'bibrec'
@@ -152,7 +167,7 @@ def dump_bibrec(dump_folder, bibrec_dump, dump_type):
                 """ FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'"""\
                 """ LINES TERMINATED BY '\n'"""\
                 """ FROM bibrec""",\
-                 ('/tmp'+dump_file,))
+                 ('/tmp'+dump_file,)) #'
 
         dummy1, dummy2, dummy3 = run_shell_command("cp /tmp/%s %s", (dump_file, dump_bibrec_folder))
         if dummy1:
@@ -171,7 +186,7 @@ def dump_bibrec(dump_folder, bibrec_dump, dump_type):
             task_update_status("ERROR")
             sys.exit(1)
 
-def dump_rnkusagedata(dump_folder, full_dump, dump_type):
+def dump_rnkusagedata(dump_folder, full_dump, dump_type='sql'):
     """
     Dump rnkUSAGEDATA table into SQL file called FILENAME living in
     DIRNAME. If full_dump is specified we dump whole table, otherwise
@@ -314,12 +329,12 @@ def update_seens_counts(action_recids, reclist_in_collection):
 def get_viewed_recids(ip_address, user_id, referrer, window_time, query_time):
     "Returns record ids which were detail viewed if any, otherwise returns empty list."
     viewed_records = []
-    viewed_recids = run_sql("SELECT id_bibrec"\
-                            " FROM rnkPAGEVIEWS"\
-                            " WHERE client_host=%s"\
-                            " AND view_time BETWEEN %s AND %s"\
-                            " AND referer=%s"\
-                            " AND id_user=%s",\
+    viewed_recids = run_sql("""SELECT id_bibrec
+                               FROM rnkPAGEVIEWS
+                               WHERE client_host=%s
+                               AND view_time BETWEEN %s AND %s
+                               AND referer=%s
+                               AND id_user=%s""",
                              (ip_address, query_time, window_time, referrer, user_id))
     return [row[0] for row in viewed_recids]
 
@@ -407,7 +422,7 @@ def update_rnkPAGEVIEWS(viewed_recids, user_id, ip_address, reclist, referrer, j
                         " AND client_host=%s",\
                         (view_position, query_date, query_id, viewed_recid, query_date, query_time_window, user_id, referrer, ip_address))
 
-def update_rnkDOWNLOADS(downloaded_recids, user_id, ip_address, reclist, referrer, jrec, query_date, query_time_window, query_id):
+def update_rnkDOWNLOADS(downloaded_recids, user_id, ip_address, reclist, referrer, jrec, query_date, query_time_window, query_id, site_url):
     """Updates downloaded document ranks."""
     if downloaded_recids and reclist:
         for downloaded_recid in downloaded_recids:
@@ -424,9 +439,9 @@ def update_rnkDOWNLOADS(downloaded_recids, user_id, ip_address, reclist, referre
                         " AND id_user=%s"\
                         " AND client_host=%s"\
                         " AND (referer=%s OR referer LIKE %s)",\
-                         (download_position, query_date, query_id, downloaded_recid, query_date, query_time_window, user_id, ip_address, referrer, CFG_SITE_URL+'/record/'+str(downloaded_recid)+'%'))
+                         (download_position, query_date, query_id, downloaded_recid, query_date, query_time_window, user_id, ip_address, referrer, site_url+'/record/'+str(downloaded_recid)+'%'))
 
-def update_rnkEXTLINKS(extdownloaded_recids, user_id, ip_address, reclist, referrer, jrec, query_date, query_time_window, query_id):
+def update_rnkEXTLINKS(extdownloaded_recids, user_id, ip_address, reclist, referrer, jrec, query_date, query_time_window, query_id, site_url):
     """Updates downloaded document ranks."""
     if extdownloaded_recids and reclist:
         for extdownloaded_recid in extdownloaded_recids:
@@ -443,7 +458,7 @@ def update_rnkEXTLINKS(extdownloaded_recids, user_id, ip_address, reclist, refer
                         " AND id_user=%s"\
                         " AND client_host=%s"\
                         " AND (referer=%s OR referer LIKE %s)",\
-                         (download_position, query_date, query_id, extdownloaded_recid, query_date, query_time_window, user_id, ip_address, referrer, CFG_SITE_URL+'/record/'+str(extdownloaded_recid)+'%'))
+                         (download_position, query_date, query_id, extdownloaded_recid, query_date, query_time_window, user_id, ip_address, referrer, site_url+'/record/'+str(extdownloaded_recid)+'%'))
 
 def getWrdSimilarity(reclist, patterns, query_id, dump_folder):
     """This function inserts word similarity for each entry of reclist in external file. """
@@ -451,7 +466,7 @@ def getWrdSimilarity(reclist, patterns, query_id, dump_folder):
     rank_values = rank_records("wrd", 0, hitset, patterns, 0)
     records, scores = rank_values[0:2]
 
-    wrd_sim_data = repr(query_id) + '---' + repr(records) + '---' + repr(scores) + '\t'
+    wrd_sim_data = repr(query_id) + '---' + repr(records) + '---' + repr(scores) + '\n'
 
     dump_wrd_sim_folder = dump_folder + 'wrd_sim'
     print dump_wrd_sim_folder
@@ -473,7 +488,7 @@ def getWrdSimilarity(reclist, patterns, query_id, dump_folder):
 
 def dump_user_query(dump_folder, user_id, ip_address, query_id, date, pattern, reclist):
     """Dumping user_query information"""
-    user_query_data = repr(user_id) + '---' + repr(ip_address) + '---' +  repr(query_id) + '---' + repr(date) + '---' + repr(pattern) + '---' + repr(reclist) + '\t'
+    user_query_data = repr(user_id) + '---' + repr(ip_address) + '---' +  repr(query_id) + '---' + repr(date) + '---' + repr(pattern) + '---' + repr(reclist) + '\n'
 
     user_query_dump_folder = dump_folder + 'user_query'
 
@@ -509,56 +524,116 @@ def unify(sequence):
         yada = set(sequence)
         return list(yada)
 
-def update_download_counts():
-    """Update download counts in the rnkUSAGEDATA table"""
-    ref = CFG_SITE_URL+ '/search?' + '%' + 'p=' + '%'
-    detailed_ref = CFG_SITE_URL+ '/record/' + '%'
+def update_download_counts(from_date, until_date):
+    """
+    Update download counts in the rnkUSAGEDATA table
+    """
+    if until_date:
+        data_downloads = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
+                                    FROM  rnkDOWNLOADS
+                                    WHERE id_query > 0
+                                    AND   download_time>=%s
+                                    AND   download_time<=%s
+                                    GROUP BY id_bibrec""", (current_time, from_date, until_date))
 
-    data_downloads = [row for row in run_sql("SELECT id_bibrec, CONCAT(COUNT(*)), %s FROM rnkDOWNLOADS WHERE referer LIKE %s OR referer LIKE %s GROUP BY id_bibrec", (current_time, ref, detailed_ref))]
-    data_extdownloads = [row for row in run_sql("SELECT id_bibrec, CONCAT(COUNT(*)), %s FROM rnkEXTLINKS WHERE referer LIKE %s OR referer LIKE %s GROUP BY id_bibrec", (current_time, ref, detailed_ref))]
+        data_extdownloads = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
+                                       FROM  rnkEXTLINKS
+                                       WHERE id_query > 0
+                                       AND   download_time>=%s
+                                       AND   download_time<=%s
+                                       GROUP BY id_bibrec""", (current_time, from_date, until_date))
+    else:
+        data_downloads = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
+                                    FROM  rnkDOWNLOADS
+                                    WHERE id_query > 0
+                                    AND   download_time>=%s
+                                    GROUP BY id_bibrec""", (current_time, from_date))
+
+        data_extdownloads = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
+                                       FROM  rnkEXTLINKS
+                                       WHERE id_query > 0
+                                       AND   download_time>=%s
+                                       GROUP BY id_bibrec""", (current_time, from_date))
+
     data = data_downloads + data_extdownloads
 
     if data:
         for x in range(len(data)/100000+1):
             run_sql("INSERT INTO rnkUSAGEDATA"\
                     " (id_bibrec, nbr_downloads, time_stamp)"\
-                    " VALUES  %s"\
+                    " VALUES %s"\
                     " ON DUPLICATE KEY UPDATE"\
-                    " nbr_downloads=nbr_downloads+VALUES(nbr_downloads), time_stamp=VALUES(time_stamp)" % (str(data[x*100000:(x+1)*100000])[1:-1],))
+                    " nbr_downloads=nbr_downloads+VALUES(nbr_downloads), time_stamp=VALUES(time_stamp)" % \
+                    (str(data[x*100000:(x+1)*100000])[1:-1],))
 
-def update_pageview_counts():
-    """Update detailed view counts in the rnkUSAGEDATA table. Update is done in chuncks, one chunk contains 100 000 entries."""
-    ref = CFG_SITE_URL+ '/search?' + '%' + 'p=' + '%'
-    data = [row for row in run_sql("SELECT id_bibrec, CONCAT(COUNT(*)), %s FROM rnkPAGEVIEWS WHERE referer LIKE %s GROUP BY id_bibrec", (current_time, ref))]
+def update_pageview_counts(from_date, until_date):
+    """
+    Update detailed view counts in the rnkUSAGEDATA table. Update is
+    done in chuncks, one chunk contains 100 000 entries.
+    """
+    if until_date:
+        data = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
+                            FROM  rnkPAGEVIEWS
+                            WHERE id_query > 0
+                            AND   view_time>=%s
+                            AND   view_time<=%s
+                            GROUP BY id_bibrec""", (current_time, from_date, until_date))
+    else:
+        data = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
+                            FROM  rnkPAGEVIEWS
+                            WHERE id_query > 0
+                            AND   view_time>=%s
+                            GROUP BY id_bibrec""", (current_time, from_date))
+
     if data:
         for x in range(len(data)/100000+1):
             run_sql("INSERT INTO rnkUSAGEDATA"\
                     " (id_bibrec, nbr_pageviews, time_stamp)"\
-                    " VALUES  %s"\
+                    " VALUES %s"\
                     " ON DUPLICATE KEY UPDATE"\
-                    " nbr_pageviews=nbr_pageviews+VALUES(nbr_pageviews), time_stamp=VALUES(time_stamp)" % (str(data[x*100000:(x+1)*100000])[1:-1],))
+                    " nbr_pageviews=nbr_pageviews+VALUES(nbr_pageviews), time_stamp=VALUES(time_stamp)" % \
+                    (str(data[x*100000:(x+1)*100000])[1:-1],))
 
 def get_drank_counts():
     """Core function for updating rnkUSAGEDATA counts and dumping necessary information."""
 #    startime = datetime.datetime.now()
 
-    #getting some parameters
+    # Getting some parameters
     dump_folder = task_get_option('output', CFG_LOGDIR + '/drank_dumps/')
-    rnkUD_dump_type = task_get_option('rnkUD_dump', 0)
+    rnkUD_dump_type = task_get_option('rnkUD-dump', 0)
     dump_type = task_get_option('type', 'sql')
     bibrec_dump = task_get_option('bibrec', bool(False))
-    user_query_dump = task_get_option('user_query', bool(False))
-    wrd_sim_dump = task_get_option('wrd_sim', bool(False))
+    user_query_dump = task_get_option('user-query', bool(False))
+    wrd_sim_dump = task_get_option('wrd-sim', bool(False))
+    verbose = task_get_option('verbose', 0)
+
+    site_url = task_get_option('site-url', CFG_SITE_URL)
+    until_date = task_get_option('until', None)
 
     task_update_progress("Starting ...")
     write_message("Starting ...")
 
-    res = run_sql("SELECT *"\
-                  " FROM user_query"\
-                  " WHERE date>=%s"\
-                  " AND referer LIKE %s",\
-                   (time_limit, CFG_SITE_URL+'%'))
-
+    # The following restrict analysis to queries run from this website,
+    # and ignore all other queries (such as those coming from an external
+    # website redirecting to this search, or all other searches done through
+    # the search APIs) in order to reduce the amount of meaningless queries
+    # to analyze (we run into memory trouble when removing this constraint:
+    # further analysis as to if 'referer != null' would be sufficient should
+    # be carried on)
+    if until_date:
+        res = run_sql("""SELECT id_user, id_query, hostname, date, reclist, referer, client_host
+                         FROM user_query
+                         WHERE date>=%s
+                         AND date<=%s
+                         AND referer LIKE %s""",
+                      (last_runtime, until_date, site_url + '%'))
+    else:
+        res = run_sql("""SELECT id_user, id_query, hostname, date, reclist, referer, client_host
+                         FROM user_query
+                         WHERE date>=%s
+                         AND referer LIKE %s""",
+                      (last_runtime, site_url + '%'))
+    write_message("Found %i user queries to process" % len(res), verbose=5)
     user_ids = [row[0] for row in res]
     query_ids = [row[1] for row in res]
     #hostnames = [row[2] for row in res]
@@ -567,13 +642,27 @@ def get_drank_counts():
     #referers = [row[5] for row in res]
     ip_addresses = [row[6] for row in res]
 
+    # We are going to update tables. Store on disk the last runtime of
+    # the script before.
+    last_run_file = open(last_run_time_file, 'w')
+    if until_date:
+        # If we specify date range, we don't want to update with
+        # current time, but specified date (only if specifed date is
+        # newer)
+        if until_date > last_runtime:
+            cPickle.dump(until_date, last_run_file)
+    else:
+        cPickle.dump(current_time, last_run_file)
+    last_run_file.close()
+
+    write_message("Processing Task 1/4: user_query analysis")
+    task_update_progress("Processing Task 1/4: user_query analysis")
+
     for i, query_id in enumerate(query_ids):
-        query_args = run_sql("SELECT urlargs"\
-                             " FROM query"\
-                             " WHERE id=%s",\
+        query_args = run_sql("SELECT urlargs FROM query WHERE id=%s",
                               (query_id,))[0][0]
         merged_recids = []
-        referrer = CFG_SITE_URL+'/search?'+query_args
+        referrer = site_url + '/search?' + query_args
         args = cgi.parse_qs(query_args)
         jrec = get_jrec(args)
         query_time_window = dates[i] + datetime.timedelta(minutes = CFG_BIBRANK_DRANK_POSTPROCESSING_TIME_WINDOW)
@@ -584,28 +673,35 @@ def get_drank_counts():
 
         action_recids = unify(downloaded_recids + viewed_recids + extdownloaded_recids)
 
-        task_update_progress("Processing Task 1/4: user_query entry %d out of %d." % (i+1, len(query_ids)))
+        task_update_progress("Processing Task 1/4: user_query entry %d out of %d" % (i+1, len(query_ids)))
 #        write_message("Processing Task 1/4: user_query entry %d out of %d." % (i+1, len(query_ids)))
 
         for record_in_list in reclists[i]:
-            #name of the collection
+            # Name of the collection
             #collection_name = record_in_list[0]
-            #records list in the collection
+            # Records list in the collection
             reclist_in_collection = record_in_list[1]
-            #extra 20 record ids, which were not displayed
+            # Extra 20 record ids, which were not displayed
             extra_reclist_in_collection = record_in_list[2]
 
-            #rank and delay from query of viewed record is updated here
-            update_rnkPAGEVIEWS(viewed_recids, user_ids[i], ip_addresses[i], reclist_in_collection, referrer, jrec, dates[i], query_time_window, query_ids[i])
-            #rank and delay from query of downloaded records is updated here
-            update_rnkDOWNLOADS(downloaded_recids, user_ids[i], ip_addresses[i], reclist_in_collection, referrer, jrec, dates[i], query_time_window, query_ids[i])
-            update_rnkEXTLINKS(extdownloaded_recids, user_ids[i], ip_addresses[i], reclist_in_collection, referrer, jrec, dates[i], query_time_window, query_ids[i])
+            # Rank and delay from query of viewed record is updated here
+            update_rnkPAGEVIEWS(viewed_recids, user_ids[i], ip_addresses[i],
+                                reclist_in_collection, referrer, jrec, dates[i],
+                                query_time_window, query_ids[i])
 
-            #here we run update on displays and seens counts
+            # Rank and delay from query of downloaded records is updated here
+            update_rnkDOWNLOADS(downloaded_recids, user_ids[i], ip_addresses[i],
+                                reclist_in_collection, referrer, jrec, dates[i],
+                                query_time_window, query_ids[i], site_url)
+            update_rnkEXTLINKS(extdownloaded_recids, user_ids[i], ip_addresses[i],
+                               reclist_in_collection, referrer, jrec, dates[i],
+                               query_time_window, query_ids[i], site_url)
+
+            # Here we run update on displays and seens counts
             update_display_counts(reclist_in_collection)
             update_seens_counts(action_recids, reclist_in_collection)
 
-            #here we collect record ids and patterns for calculating wrd similarity
+            # Here we collect record ids and patterns for calculating wrd similarity
             pattern = []
             if args.has_key('p') and reclist_in_collection:
                 pattern_string = cgi.parse_qs(query_args)['p'][0]
@@ -613,12 +709,13 @@ def get_drank_counts():
                 merged_recids.extend(reclist_in_collection)
                 merged_recids.extend(extra_reclist_in_collection)
 
-        #here we call wrd similarity and dump user_query table
+        # Here we call wrd similarity and dump user_query table
         if pattern:
             if wrd_sim_dump:
                 getWrdSimilarity(merged_recids, pattern, query_id, dump_folder)
             if user_query_dump:
-                dump_user_query(dump_folder, user_ids[i], ip_addresses[i], query_id, dates[i], pattern, reclists[i])
+                dump_user_query(dump_folder, user_ids[i], ip_addresses[i],
+                                query_id, dates[i], pattern, reclists[i])
         task_sleep_now_if_required()
 
     write_message("Done Task 1/4: Processed user_query entries")
@@ -627,13 +724,13 @@ def get_drank_counts():
     task_update_progress("Starting Task 2/4: Updating download counts")
     write_message("Starting Task 2/4: Updating download counts")
     task_sleep_now_if_required()
-    update_download_counts()
+    update_download_counts(last_runtime, until_date)
     write_message("Done Task 2/4: Updating download counts")
 
     task_update_progress("Starting Task 3/4: Updating page view counts")
     write_message("Starting Task 3/4: Updating page view counts")
     task_sleep_now_if_required()
-    update_pageview_counts()
+    update_pageview_counts(last_runtime, until_date)
     write_message("Done Task 3/4: Updating page view counts")
 
     task_update_progress("Starting Task 4/4: Dumping ...")
@@ -655,17 +752,24 @@ def main():
     """main function which is constructing bibtask."""
 
     task_init(authorization_action='run_drank_dump',
-              authorization_msg="Updating counts and dumping them for the D-rank project.",
+              authorization_msg="Query Analyzer",
               help_specific_usage="""\
-  -o, --output=DIR      Output directory. [default=%s]
-  -r, --rnkUD_dump=FD   Should we dump full rnkUSAGEDATA table(1), only changes(2) from last dump or not to dump it(0). [default=0]
-  -f, --type=FT         Set the type which should be dumped possible option csv. [default=sql]
-  -b, --bibrec=BR       Should we dump bibrec table(True) or not (False). [default=false]
-  -q, --user_query=UQ   Should we dump user_query data (True) or not (False). [default=false]
-  -w, --wrd_sim=WS      Should we dump word similarity data (True) or not (False). [default=false]
-""" % (CFG_LOGDIR + '/drank_dumps'),
+  -o, --output=DIR      Output directory [default=%s]
+  -r, --rnkUD-dump=FD   Should we dump full rnkUSAGEDATA table(1), only changes(2) from last dump or not to dump it(0) [default=0]
+  -f, --type=FT         Dump output format (csv,sql) [default=sql]
+  -b, --bibrec=BR       Should we dump bibrec table (True) or not (False) [default=false]
+  -q, --user-query=UQ   Should we dump user_query data (True) or not (False) [default=false]
+  -w, --wrd-sim=WS      Should we dump word similarity data (True) or not (False) [default=false]
+      --site-url=URL    Site URL, if analyzing imported logs [default=%s]
+      --until=DATE      Analyze logs until given DATE (format YYYY-MM-DD)
+
+Examples:
+Run periodically (for eg. weekly basis) and dump last changes from rnkUSAGEDATA:
+   $ queryanalyzer --rnkUD-dump=2  -u admin -s 1d -L "Sunday 01:00-05:00"
+""" % (CFG_LOGDIR + '/drank_dumps', CFG_SITE_URL),
               specific_params=("r:o:f:b:q:w:",
-                               ["rnkUD_dump=", "output=", "type=", "bibrec=", "user_query=", "wrd_sim="]),
+                               ["rnkUD-dump=", "output=", "type=", "bibrec=",
+                                "user-query=", "wrd-sim=", "site-url=", "until="]),
               task_submit_elaborate_specific_parameter_fnc = _dbdump_elaborate_submit_param,
               task_run_fnc = get_drank_counts)
 
