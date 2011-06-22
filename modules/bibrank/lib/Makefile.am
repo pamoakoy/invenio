@@ -29,6 +29,8 @@ pylib_DATA = bibrankadminlib.py \
              bibrank_regression_tests.py bibrank.py \
              bibrankadmin_regression_tests.py \
              bibrankgkb.py \
+             bibrank_dictionary.py \
+             bibrank_dictionary_tests.py \
              bibrank_citerank_indexer.py bibrank_citerank_indexer_tests.py \
              queryanalyzer.py
 

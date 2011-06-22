@@ -26,8 +26,8 @@ EXTRA_DIST = UNINSTALL THANKS RELEASE-NOTES configure-tests.py config.nice.in \
 
 # current MathJax version and packages
 
-MJV = 1.0.1a
-MATHJAX = MathJax-v$(MJV).zip
+MJV = 1.1
+MATHJAX = https://github.com/mathjax/MathJax/zipball/v$(MJV)
 
 # current FCKeditor version
 FCKV = 2.6.6
@@ -91,12 +91,12 @@ install-mathjax-plugin:
 	@echo "***********************************************************"
 	rm -rf /tmp/invenio-mathjax-plugin
 	mkdir /tmp/invenio-mathjax-plugin
+	mkdir -p ${prefix}/var/www/MathJax
 	(cd /tmp/invenio-mathjax-plugin && \
-	wget 'http://downloads.sourceforge.net/mathjax/$(MATHJAX)' && \
-	unzip -q -u -d ${prefix}/var/www $(MATHJAX))
+	wget '$(MATHJAX)' -O mathjax.zip --no-check-certificate && \
+	unzip -q mathjax.zip && cd mathjax-MathJax-* && cp -ur * \
+	${prefix}/var/www/MathJax)
 	rm -fr /tmp/invenio-mathjax-plugin
-	@echo "* Installing Invenio-specific MathJax config..."
-	(cd $(top_srcdir)/modules/webstyle/etc && make install)
 	@echo "***********************************************************"
 	@echo "** The MathJax plugin was successfully installed.         **"
 	@echo "** Please do not forget to properly set the option       **"
@@ -151,7 +151,7 @@ install-jquery-plugins: install-jquery-plugins
 	wget http://github.com/malsup/form/raw/master/jquery.form.js --no-check-certificate && \
 	wget http://jquery-multifile-plugin.googlecode.com/svn/trunk/jquery.MultiFile.pack.js && \
 	wget http://plugins.jquery.com/files/jquery.autogrow-1.2.2.zip && \
-	wget http://tablesorter.com/jquery.tablesorter.zip && \
+	wget http://autobahn.tablesorter.com/jquery.tablesorter.zip && \
 	wget http://www.uploadify.com/wp-content/uploads/Uploadify-v2.1.3.zip -O uploadify.zip && \
 	unzip jquery.tablesorter.zip && \
 	rm jquery.tablesorter.zip && \

@@ -18,45 +18,59 @@
 etcdir = $(sysconfdir)/bibrank
 
 etc_DATA = bibrankgkb.cfg \
-           bibrankgkb_jif_conv.kb \
-           bibrankgkb_jif_example.kb \
-           demo_jif.cfg \
-           demo_jif.kb \
-           stopwords.de.kb \
-           stopwords.el.kb \
-           stopwords.kb \
-           template_citation.cfg \
-           template_combine_method.cfg \
-           template_download_similarity.cfg \
-           template_download_total.cfg \
-           template_download_users.cfg \
-           template_single_tag_rank_method.cfg \
-           template_word_similarity.cfg \
-           wrd.cfg \
-           citation.cfg \
-           citerank_citation_t.cfg \
-           citerank_pagerank_c.cfg \
-           citerank_pagerank_t.cfg
+		   bibrankgkb_jif_conv.kb \
+		   bibrankgkb_jif_example.kb \
+		   demo_jif.cfg \
+		   demo_jif.kb \
+		   stopwords.de.kb \
+		   stopwords.el.kb \
+		   stopwords.kb \
+		   template_citation.cfg \
+		   template_combine_method.cfg \
+		   template_download_similarity.cfg \
+		   template_download_total.cfg \
+		   template_download_users.cfg \
+		   template_single_tag_rank_method.cfg \
+		   template_word_similarity.cfg \
+		   template_enhanced_ranking.cfg \
+		   template_logistic.cfg \
+		   template_hirsch.cfg \
+		   template_freshness.cfg \
+		   template_view.cfg \
+		   template_display.cfg \
+		   template_download.cfg \
+		   template_download_normal.cfg \
+		   template_hirsch_normal.cfg \
+		   wrd.cfg \
+		   citation.cfg \
+		   enhanced_ranking.cfg \
+		   logistic.cfg \
+		   hirsch.cfg \
+		   freshness.cfg \
+		   download.cfg \
+		   citerank_citation_t.cfg \
+		   citerank_pagerank_c.cfg \
+		   citerank_pagerank_t.cfg
 
 EXTRA_DIST = bibrankgkb.cfg.in \
-             bibrankgkb_jif_conv.kb \
-             bibrankgkb_jif_example.kb \
-             demo_jif.cfg.in \
-             demo_jif.kb \
-             stopwords.de.kb \
-             stopwords.el.kb \
-             stopwords.kb \
-             template_citation.cfg \
-             template_combine_method.cfg \
-             template_download_similarity.cfg \
-             template_download_total.cfg \
-             template_download_users.cfg \
-             template_single_tag_rank_method.cfg.in \
-             template_word_similarity.cfg \
-             wrd.cfg \
-             citation.cfg \
-             citerank_citation_t.cfg \
-             citerank_pagerank_c.cfg \
-             citerank_pagerank_t.cfg
+			 bibrankgkb_jif_conv.kb \
+			 bibrankgkb_jif_example.kb \
+			 demo_jif.cfg.in \
+			 demo_jif.kb \
+			 stopwords.de.kb \
+			 stopwords.el.kb \
+			 stopwords.kb \
+			 template_citation.cfg \
+			 template_combine_method.cfg \
+			 template_download_similarity.cfg \
+			 template_download_total.cfg \
+			 template_download_users.cfg \
+			 template_single_tag_rank_method.cfg.in \
+			 template_word_similarity.cfg \
+			 wrd.cfg \
+			 citation.cfg \
+			 citerank_citation_t.cfg \
+			 citerank_pagerank_c.cfg \
+			 citerank_pagerank_t.cfg
 
 CLEANFILES = *~ *.tmp
