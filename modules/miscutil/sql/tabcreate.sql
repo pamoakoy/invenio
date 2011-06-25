@@ -3038,7 +3038,7 @@ CREATE TABLE IF NOT EXISTS user_query (
   date datetime default NULL,
   reclist blob default NULL,
   referer text default NULL,
-  client_host integer default NULL,
+  client_host integer unsigned default NULL,
   KEY id_user (id_user,id_query)
 ) ENGINE=MyISAM;
 

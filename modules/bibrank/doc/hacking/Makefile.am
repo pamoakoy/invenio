@@ -25,8 +25,7 @@ webdoclib_DATA = \
 	bibrank-single-tag-rank.webdoc \
 	bibrank-citation-t.webdoc \
 	bibrank-pagerank-c.webdoc \
-	bibrank-pagerank-t.webdoc \
-	bibrank-query-analyzer.webdoc
+	bibrank-pagerank-t.webdoc
 
 EXTRA_DIST = $(webdoclib_DATA)
 

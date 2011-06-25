@@ -5243,7 +5243,7 @@ def perform_request_search(req=None, cc=CFG_SITE_NAME, c=None, p="", f="", rg=CF
                                 # rank_records failed and returned some error message to display:
                                 print_warning(req, results_final_relevances_prologue)
                                 print_warning(req, results_final_relevances_epilogue)
-                       only_record_ids, extra_record_ids = \
+                        only_record_ids, extra_record_ids = \
                                         print_records(req, results_final_recIDs, jrec, rg, of, ot, ln,
                                                       results_final_relevances,
                                                       results_final_relevances_prologue,

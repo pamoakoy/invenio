@@ -521,7 +521,7 @@ update-v0.99.3-tables: # from v0.99.3 to v1.0.0-rc0
 	echo "ALTER TABLE user_query ADD COLUMN referer TEXT DEFAULT NULL;" | ${prefix}/bin/dbexec
 	echo "ALTER TABLE rnkDOWNLOADS ADD COLUMN display_position MEDIUMINT UNSIGNED NOT NULL DEFAULT '0';" | ${prefix}/bin/dbexec
 	echo "ALTER TABLE rnkPAGEVIEWS ADD COLUMN display_position MEDIUMINT UNSIGNED NOT NULL DEFAULT '0';" | ${prefix}/bin/dbexec
-	echo "ALTER TABLE user_query ADD COLUMN client_host INTEGER  DEFAULT NULL;" | ${prefix}/bin/dbexec
+	echo "ALTER TABLE user_query ADD COLUMN client_host INTEGER unsigned DEFAULT NULL;" | ${prefix}/bin/dbexec
 	echo "ALTER TABLE rnkPAGEVIEWS ADD COLUMN view_delay TIME DEFAULT NULL;" | ${prefix}/bin/dbexec
 	echo "ALTER TABLE rnkDOWNLOADS ADD COLUMN download_delay TIME DEFAULT NULL;" | ${prefix}/bin/dbexec
 	echo "CREATE INDEX rnkPAGEVIEWS_client_host_index ON rnkPAGEVIEWS(client_host);" | ${prefix}/bin/dbexec
