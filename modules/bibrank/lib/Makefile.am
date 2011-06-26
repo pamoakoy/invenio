@@ -30,7 +30,8 @@ pylib_DATA = bibrankadminlib.py \
              bibrankadmin_regression_tests.py \
              bibrankgkb.py \
              bibrank_citerank_indexer.py bibrank_citerank_indexer_tests.py \
-             queryanalyzer.py
+             queryanalyzer.py \
+             bibrank_drank_sorter.py bibrank_drank_sorter_tests.py             
 
 EXTRA_DIST = $(pylib_DATA)
 

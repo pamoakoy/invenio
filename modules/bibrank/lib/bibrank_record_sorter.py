@@ -37,9 +37,32 @@ from invenio.bibindex_engine_stemmer import stem
 from invenio.bibindex_engine_stopwords import is_stopword
 from invenio.bibrank_citation_searcher import get_cited_by, get_cited_by_weight
 from invenio.intbitset import intbitset
+from invenio.bibrank_drank_sorter.py import rnkDict
 
+def rescale(recdict, rank_limit_relevance):
+    """Rescale list so that values are between 0-100."""
+    reclist = []
+    divideby = max(recdict.values())
+    for (j, w) in recdict.iteritems():
+        w = int(w * 100 / divideby)
+        if w >= rank_limit_relevance:
+            reclist.append((j, w))
+    return reclist
+
+def rescale_list(reclist, rank_limit_relevance):
+    """Rescale list so that values are between 0-100."""
+    values_new = []
+    keys, values = zip(*reclist)
+    divideby = max(values)
+    for item in values:
+        item = int(item * 100 / divideby)
+        if item >= rank_limit_relevance:
+            values_new.append(item)
+    reclist = zip(*(keys, values_new))
+    return reclist
 
 def compare_on_val(first, second):
+    """Compare on val."""
     return cmp(second[1], first[1])
 
 def check_term(term, col_size, term_rec, max_occ, min_occ, termlength):
@@ -167,6 +190,16 @@ def get_bibrank_methods(colID, ln=CFG_SITE_LANG):
                 avail_methods.append((rank_method_code, rank_method_code))
     return avail_methods
 
+def ranked(_rnkdict, hitset):
+    """"""
+    rnkdict = rnkDict()
+    rnkdict.loaddict(_rnkdict)
+    rnkdict.clean()
+ 
+    rnkdict.filter(list(hitset))
+    result = (rnkdict.rank(),"(", ")", "")
+    return result # rnkdict.rank()
+
 def rank_records(rank_method_code, rank_limit_relevance, hitset_global, pattern=[], verbose=0):
     """rank_method_code, e.g. `jif' or `sbr' (word frequency vector model)
        rank_limit_relevance, e.g. `23' for `nbc' (number of citations) or `0.10' for `vec'
@@ -199,6 +232,8 @@ def rank_records(rank_method_code, rank_limit_relevance, hitset_global, pattern=
 
         if func_object and pattern and pattern[0][0:6] == "recid:" and function == "word_similarity":
             result = find_similar(rank_method_code, pattern[0][6:], hitset, rank_limit_relevance, verbose)
+        elif rank_method_code == "download":
+            result = ranked(rank_method_code, hitset)
         elif rank_method_code == "citation":
             #we get rank_method_code correctly here. pattern[0] is the search word - not used by find_cit
             p = ""
@@ -448,6 +483,82 @@ def find_similar(rank_method_code, recID, hitset, rank_limit_relevance,verbose):
 
     return (reclist[:len(reclist)], methods[rank_method_code]["prefix"], methods[rank_method_code]["postfix"], voutput)
 
+def enhanced_ranking(rank_method_code, lwords, hitset, rank_limit_relevance, verbose):
+    """Ranking a records containing specified words and returns a sorted list.
+    input:
+    rank_method_code - the code of the method, from the name field in rnkMETHOD
+    lwords - a list of words from the query
+    hitset - a list of hits for the query found by search_engine
+    rank_limit_relevance - show only records with a rank value above this
+    verbose - verbose value
+    output:
+    reclist - a list of sorted records: [[23, 34], [344, 24], [1, 01]]
+    prefix - what to show before the rank value
+    postfix - what to show after the rank value
+    voutput - contains extra information, content dependent on verbose value"""
+
+    global voutput
+    startCreate = time.time()
+
+    if verbose > 0:
+        voutput += "<br />Running rank method: %s, using word_frequency function in bibrank_record_sorter<br />" % rank_method_code
+ 
+    lwords_old = lwords
+    lwords = []
+    #Check terms, remove non alphanumeric characters. Use both unstemmed and stemmed version of all terms.
+    for i in range(0, len(lwords_old)):
+        term = string.lower(lwords_old[i])
+        if not methods[rank_method_code]["stopwords"] == "True" or methods[rank_method_code]["stopwords"] and not is_stopword(term, 1):
+            lwords.append((term, methods[rank_method_code]["rnkWORD_table"]))
+            terms = string.split(string.lower(re.sub(methods[rank_method_code]["chars_alphanumericseparators"], ' ', term)))
+            for term in terms:
+                if methods[rank_method_code].has_key("stemmer"): # stem word
+                    term = stem(string.replace(term, ' ', ''), methods[rank_method_code]["stemmer"])
+                if lwords_old[i] != term: #add if stemmed word is different than original word
+                    lwords.append((term, methods[rank_method_code]["rnkWORD_table"]))
+
+    (recdict, rec_termcount, lrecIDs_remove) = ({}, {}, {})
+    #For each term, if accepted, get a list of the records using the term
+    #calculate then relevance for each term before sorting the list of records
+    for (term, table) in lwords:
+        term_recs = run_sql("""SELECT term, hitlist FROM %s WHERE term=%%s""" % methods[rank_method_code]["rnkWORD_table"], (term, ))
+        if term_recs: #if term exists in database, use for ranking
+            term_recs = deserialize_via_marshal(term_recs[0][1])
+            (recdict, rec_termcount) = calculate_record_relevance((term, int(term_recs["Gi"][1])) , term_recs, hitset, recdict, rec_termcount, verbose, quick=None)
+            del term_recs
+
+    rnkdict_ = rnkDict()
+    rnkdict_.put(recdict)
+    rnkdict  = rnkDict()
+    rnkdict.loaddict("logistic")
+    rnkmerge = rnkDict()
+#    rnkmerge.merge(rnkdict_, rnkdict, [0, 0.1, 0.1])
+    rnklist = []
+    rnklist.append(rnkdict_.getdict())
+    rnklist.append(rnkdict.getdict())
+    rnkmerge.octopus(rnklist, [0.5, 0.00001, 0.9999])
+    recdict = rnkmerge.getdict()
+
+    if len(recdict) == 0 or (len(lwords) == 1 and lwords[0] == ""):
+        return (None, "Records not ranked. The query is not detailed enough, or not enough records found, for ranking to be possible.", "", voutput)
+    else: #sort if we got something to sort
+        (reclist, hitset) = sort_record_relevance(recdict, hitset, rank_limit_relevance, _rescale=0, verbose=0)
+
+    #Add any documents not ranked to the end of the list
+    if hitset:
+        lrecIDs = list(hitset)                       #using 2-3mb
+        reclist = zip(lrecIDs, [0] * len(lrecIDs)) + reclist      #using 6mb
+
+    if verbose > 0:
+        voutput += "<br />Current number of recIDs: %s<br />" % (methods[rank_method_code]["col_size"])
+        voutput += "Number of terms: %s<br />" % run_sql("SELECT count(id) FROM %s" % methods[rank_method_code]["rnkWORD_table"])[0][0]
+        voutput += "Terms: %s<br />" % lwords
+        voutput += "Prepare and pre calculate time: %s<br />" % (str(time.time() - startCreate))
+        voutput += "Total time used: %s<br />" % (str(time.time() - startCreate))
+        rank_method_stat(reclist, lwords)
+
+    return (reclist, methods[rank_method_code]["prefix"], methods[rank_method_code]["postfix"], voutput)
+
 def word_similarity(rank_method_code, lwords, hitset, rank_limit_relevance, verbose):
     """Ranking a records containing specified words and returns a sorted list.
     input:
@@ -582,7 +693,7 @@ def calculate_record_relevance_findsimilar(term, invidx, hitset, recdict, rec_te
 
     return (recdict, rec_termcount)
 
-def sort_record_relevance(recdict, rec_termcount, hitset, rank_limit_relevance, verbose):
+def sort_record_relevance(recdict, hitset, rank_limit_relevance, _rescale=0, verbose=0):
     """Sorts the dictionary and returns records with a relevance higher than the given value.
     recdict - {recid: value} unsorted
     rank_limit_relevance - a value > 0 usually
@@ -595,12 +706,11 @@ def sort_record_relevance(recdict, rec_termcount, hitset, rank_limit_relevance, 
     #remove all ranked documents so that unranked can be added to the end
     hitset -= recdict.keys()
 
-    #gives each record a score between 0-100
-    divideby = max(recdict.values())
+    #gives each record a score between 0-100 only if rescale is not zero. this is usefull for drank-integration
     for (j, w) in recdict.iteritems():
-        w = int(w * 100 / divideby)
-        if w >= rank_limit_relevance:
-            reclist.append((j, w))
+        reclist.append((j, w))
+    if _rescale:
+        reclist = rescale(recdict, rank_limit_relevance)
 
     #sort scores
     reclist.sort(lambda x, y: cmp(x[1], y[1]))
@@ -681,6 +791,7 @@ try:
     psyco.bind(find_similar)
     psyco.bind(rank_by_method)
     psyco.bind(calculate_record_relevance)
+    psyco.bind(enhanced_ranking)
     psyco.bind(word_similarity)
     psyco.bind(sort_record_relevance)
 except StandardError, e:
