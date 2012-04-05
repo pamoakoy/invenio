@@ -1,6 +1,27 @@
-#!/usr/bin/python
-"""This file defines classes used for management of d-Rank ranking tables. 
-It includes rank normalization, rescaling, filtering and aggregation."""
+# -*- coding: utf-8 -*-
+## Ranking of records using different parameters and methods on the fly.
+##
+## This file is part of Invenio.
+## Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 CERN.
+##
+## Invenio is free software; you can redistribute it and/or
+## modify it under the terms of the GNU General Public License as
+## published by the Free Software Foundation; either version 2 of the
+## License, or (at your option) any later version.
+##
+## Invenio is distributed in the hope that it will be useful, but
+## WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+## General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with Invenio; if not, write to the Free Software Foundation, Inc.,
+## 59 Temple Place, Suite 330, Boston, MA 02111-1307, USA.
+
+__revision__ = "$Id$"
+
+"""This file defines class used for the management of DRANK ranking tables. 
+It includes rank normalization, rescaling, filtering and aggregation/merging."""
 import sys
 from math import exp
 from invenio.dbquery import deserialize_via_marshal, serialize_via_marshal, run_sql
@@ -58,7 +79,52 @@ class rnkDict:
             except ValueError as err:
                 sys.stderr.write("Warning: %s\n" % err)
         return
-
+    
+    def lookup_in_lut(self,lut,reclist):
+        """This is a mapping function which looks into existing look-up table/dictionary, 
+        the corresponding scores for a record list.  It also interpulates using 
+        newton's second order to estimate scores not in the look up table/dictionary """
+        freq_values=sorted(lut.keys()) 
+        looked_up_scores={}         
+        for key,score in reclist.items():
+            if lut.has_key(reclist[key]):
+                looked_up_scores[key] = lut[reclist[key]]
+    
+            else:
+                for k in range(0, len(freq_values)-1):
+    
+                    if (freq_values[k] < score) and (freq_values[k+1] > score):
+                        looked_up_scores[int(key)]= self.get_interpolated_value(score, freq_values[k], freq_values[k+1], lut[freq_values[k]], lut[freq_values[k+1]])
+                        break
+    #    print "record_pscore:{0}".format(record_pscore)
+        self.content=looked_up_scores
+        return
+    
+    def get_interpolated_value(self,x, x1, x2, y1, y2):
+        """Function that utilizes a second order newtons interpulant.    
+        Get the interpolated value base on the two point (x1, y1) and (x2, y2) that x1 < x < x2
+        Input:
+            - x: new value
+            - (x1, y1): the first point of interpolation
+            - (x2, y2): the second point of interpolation
+        Output:
+            - interpolated value of y
+        """
+        y = float(y1) + ((float(y2) - float(y1))*(float(x) - float(x1)))/(float(x2)-float(x1))
+    
+        return y
+    
+    def loadlut(self, dictname):
+        """Load the ranking table into memory. Inverse of savedict."""
+#        identifier = run_sql("SELECT id from rnkMETHOD where name=\"%s\"" % dictname)
+        res = run_sql("SELECT drank_lut FROM rnkDRANKLUT WHERE drank_name=\"%s\"" %dictname)
+        
+        if res:
+            self.content = deserialize_via_marshal(res[0][0])
+        else:
+            self.content = {}
+        return
+    
     def loaddict(self, dictname):
         """Load the ranking table into memory. Inverse of savedict."""
         identifier = run_sql("SELECT id from rnkMETHOD where name=\"%s\"" % dictname)
@@ -152,7 +218,8 @@ class rnkDict:
             _c_dict[item] = 1/(1+exp(1)**(-1*(weight[0]+weight[2]*_b_dict[item])))
         self.content = _c_dict
         return 
-
+    
+    
     def multiply(self, a_dict, b_dict):
         """Create a new table multiplying values from two other ranking tables.""" 
         _a_dict = a_dict.getdict()
@@ -171,7 +238,7 @@ class rnkDict:
         return        
 
     def normalize(self, outlier=1):
-        """Normalize scors in the ranking table w/kde. Remove outliers first."""
+        """Normalize scores in the ranking table w/kde. Remove outliers first."""
         scorelist = self.content.values()
         if outlier:
             outlier_above = scoreatpercentile(scorelist, 100-outlier)
@@ -188,7 +255,7 @@ class rnkDict:
         return
 
     def normalize_take_displays_into_account(self, outlier=1):
-        """Normalize scores in the rnaking table w/kde. Remove outliers first. Take displays into account."""
+        """Normalize scores in the ranking table w/kde. Remove outliers first. Take displays into account."""
         _dico = rnkDict()
         _dico.loaddict("displays")
         mydico = _dico.getdict()

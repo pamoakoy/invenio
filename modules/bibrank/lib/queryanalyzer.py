@@ -91,12 +91,22 @@ def _dbdump_elaborate_submit_param(key, value, dummyopts, dummyargs):
         except ValueError:
             raise StandardError, "ERROR: Input '%s' is not valid." % \
                   value
+                  
+    elif key in ('-W', '--only-wrd-scores'):
+        try:
+            task_set_option('only-wrd-scores', bool(value))
+        except ValueError:
+            raise StandardError, "ERROR: Input '%s' is not valid." % \
+                  value                  
+                  
     elif key in ('-w', '--wrd-sim'):
         try:
             task_set_option('wrd-sim', bool(value))
         except ValueError:
             raise StandardError, "ERROR: Input '%s' is not valid." % \
                   value
+                  
+
     elif key == '--site-url':
         try:
             task_set_option('site-url', value)
@@ -460,31 +470,56 @@ def update_rnkEXTLINKS(extdownloaded_recids, user_id, ip_address, reclist, refer
                         " AND (referer=%s OR referer LIKE %s)",\
                          (download_position, query_date, query_id, extdownloaded_recid, query_date, query_time_window, user_id, ip_address, referrer, site_url+'/record/'+str(extdownloaded_recid)+'%'))
 
-def getWrdSimilarity(reclist, patterns, query_id, dump_folder):
+def getWrdSimilarity(reclist, patterns, query_id,only_wrd_sim_scores, dump_folder):
     """This function inserts word similarity for each entry of reclist in external file. """
     hitset = HitSet(reclist)
-    rank_values = rank_records("wrd", 0, hitset, patterns, 0)
+    rank_values = rank_records("wrd", 0, hitset, patterns, 0,0)
     records, scores = rank_values[0:2]
-
-    wrd_sim_data = repr(query_id) + '---' + repr(records) + '---' + repr(scores) + '\n'
-
-    dump_wrd_sim_folder = dump_folder + 'wrd_sim'
-    print dump_wrd_sim_folder
-
-    dump_wrd_sim_file = 'drank_wrd_sim_dump_' + current_time.strftime("%Y%m%d%H%M%S") + '.csv'
-
-    if not os.path.isdir(dump_wrd_sim_folder):
-        os.makedirs(dump_wrd_sim_folder)
-
-    if os.path.isfile(dump_wrd_sim_folder + dump_wrd_sim_file):
-        fd = open(dump_wrd_sim_folder + dump_wrd_sim_file,'a')
-        fd.write(wrd_sim_data)
-        fd.close()
-    else:
-        fd = open(dump_wrd_sim_folder + dump_wrd_sim_file,'w')
-        write_message("... writing %s" % dump_wrd_sim_folder+dump_wrd_sim_file)
-        fd.write(wrd_sim_data)
-        fd.close()
+    if only_wrd_sim_scores:
+        #Dump only scores for wrd_sim lut.         
+        try:
+            write_message("trying: dumping wrd sim scores")
+            write_message("done: dumping wrd sim scores")
+            wrd_lut_scores=repr(scores) + '\n'
+            lut_wrd_scores_file='lut_wrd_scores_' + current_time.strftime("%Y%m%d%H%M%S") + '.csv'
+            lut_wrd_scores_folder= dump_folder + '/wrd_sim_lut/'
+            if not os.path.isdir(lut_wrd_scores_folder):
+                os.makedirs(lut_wrd_scores_folder)
+        
+            if os.path.isfile(lut_wrd_scores_folder + lut_wrd_scores_file):
+                fd = open(lut_wrd_scores_folder + lut_wrd_scores_file,'a')
+                fd.write(wrd_lut_scores)
+                fd.close()
+            else:
+                fd = open(lut_wrd_scores_folder + lut_wrd_scores_file,'w')
+                write_message("... writing %s" % lut_wrd_scores_folder+lut_wrd_scores_file)
+                fd.write(wrd_lut_scores)
+                fd.close()
+        except:
+            write_message("could not dump wrd_sim scores")
+            pass 
+        
+    else:  
+        #Dump scores based on query ID and record. Important for external DRANK analysis     
+        wrd_sim_data = repr(query_id) + '---' + repr(records) + '---' + repr(scores) + '\n'
+        
+        dump_wrd_sim_folder = dump_folder + '/wrd_sim/'
+        print dump_wrd_sim_folder
+    
+        dump_wrd_sim_file = 'drank_wrd_sim_dump_' + current_time.strftime("%Y%m%d%H%M%S") + '.csv'
+                                                                                                      
+        if not os.path.isdir(dump_wrd_sim_folder):
+            os.makedirs(dump_wrd_sim_folder)
+    
+        if os.path.isfile(dump_wrd_sim_folder + dump_wrd_sim_file):
+            fd = open(dump_wrd_sim_folder + dump_wrd_sim_file,'a')
+            fd.write(wrd_sim_data)
+            fd.close()
+        else:
+            fd = open(dump_wrd_sim_folder + dump_wrd_sim_file,'w')
+            write_message("... writing %s" % dump_wrd_sim_folder+dump_wrd_sim_file)
+            fd.write(wrd_sim_data)
+            fd.close()
 
 def dump_user_query(dump_folder, user_id, ip_address, query_id, date, pattern, reclist):
     """Dumping user_query information"""
@@ -534,36 +569,37 @@ def update_download_counts(from_date, until_date):
                                     WHERE id_query > 0
                                     AND   download_time>=%s
                                     AND   download_time<=%s
-                                    GROUP BY id_bibrec""", (current_time, from_date, until_date))
+                                    GROUP BY id_bibrec""", (str(current_time), str(from_date), str(until_date)))
 
         data_extdownloads = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
                                        FROM  rnkEXTLINKS
                                        WHERE id_query > 0
                                        AND   download_time>=%s
                                        AND   download_time<=%s
-                                       GROUP BY id_bibrec""", (current_time, from_date, until_date))
+                                       GROUP BY id_bibrec""", (str(current_time), str(from_date), str(until_date)))
     else:
         data_downloads = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
                                     FROM  rnkDOWNLOADS
                                     WHERE id_query > 0
                                     AND   download_time>=%s
-                                    GROUP BY id_bibrec""", (current_time, from_date))
+                                    GROUP BY id_bibrec""", (str(current_time), str(from_date)))
 
-        data_extdownloads = [row for row in run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
+        data_extdownloads = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
                                        FROM  rnkEXTLINKS
                                        WHERE id_query > 0
                                        AND   download_time>=%s
-                                       GROUP BY id_bibrec""", (current_time, from_date))]
+                                       GROUP BY id_bibrec""", (str(current_time), str(from_date)))
 
     data = data_downloads + data_extdownloads
 
     if data:
+        data=[(row[0],row[1],row[2]) for row in data]
         for x in range(len(data)/100000+1):
-            run_sql("INSERT INTO rnkUSAGEDATA"\
-                    " (id_bibrec, nbr_downloads, time_stamp)"\
-                    " VALUES %s"\
-                    " ON DUPLICATE KEY UPDATE"\
-                    " nbr_downloads=nbr_downloads+VALUES(nbr_downloads), time_stamp=VALUES(time_stamp)" % (str(data[x*100000:(x+1)*100000])[1:-1],))
+            run_sql("""INSERT INTO rnkUSAGEDATA
+                     (id_bibrec, nbr_downloads, time_stamp)
+                     VALUES %s
+                     ON DUPLICATE KEY UPDATE
+                     nbr_downloads=nbr_downloads+VALUES(nbr_downloads), time_stamp=VALUES(time_stamp)""" % (str(data[x*100000:(x+1)*100000])[1:-1]))
 
 def update_pageview_counts(from_date, until_date):
     """
@@ -576,22 +612,21 @@ def update_pageview_counts(from_date, until_date):
                             WHERE id_query > 0
                             AND   view_time>=%s
                             AND   view_time<=%s
-                            GROUP BY id_bibrec""", (current_time, from_date, until_date))
+                            GROUP BY id_bibrec""", (str(current_time), str(from_date), str(until_date)))
     else:
         data = run_sql("""SELECT id_bibrec, CONCAT(COUNT(*)), %s
                             FROM  rnkPAGEVIEWS
                             WHERE id_query > 0
                             AND   view_time>=%s
-                            GROUP BY id_bibrec""", (current_time, from_date))
+                            GROUP BY id_bibrec""", (str(current_time), str(from_date)))
+    
 
     if data:
+        data=[(row[0],row[1],row[2]) for row in data]
         for x in range(len(data)/100000+1):
-            run_sql("INSERT INTO rnkUSAGEDATA"\
-                    " (id_bibrec, nbr_pageviews, time_stamp)"\
-                    " VALUES %s"\
-                    " ON DUPLICATE KEY UPDATE"\
-                    " nbr_pageviews=nbr_pageviews+VALUES(nbr_pageviews), time_stamp=VALUES(time_stamp)" % \
-                    (str(data[x*100000:(x+1)*100000])[1:-1],))
+            run_sql("""INSERT INTO rnkUSAGEDATA
+                     (id_bibrec, nbr_pageviews, time_stamp)
+                     VALUES %s ON DUPLICATE KEY UPDATE nbr_pageviews=nbr_pageviews+VALUES(nbr_pageviews), time_stamp=VALUES(time_stamp)""" % (str(data[x*100000:(x+1)*100000])[1:-1]))
 
 def get_drank_counts():
     """Core function for updating rnkUSAGEDATA counts and dumping necessary information."""
@@ -604,13 +639,15 @@ def get_drank_counts():
     bibrec_dump = task_get_option('bibrec', bool(False))
     user_query_dump = task_get_option('user-query', bool(False))
     wrd_sim_dump = task_get_option('wrd-sim', bool(False))
+    only_wrd_sim_scores = task_get_option('only-wrd-scores', bool(False))
     verbose = task_get_option('verbose', 0)
 
     site_url = task_get_option('site-url', CFG_SITE_URL)
     until_date = task_get_option('until', None)
-
+    
     task_update_progress("Starting ...")
     write_message("Starting ...")
+    task_sleep_now_if_required()
 
     # The following restrict analysis to queries run from this website,
     # and ignore all other queries (such as those coming from an external
@@ -711,36 +748,38 @@ def get_drank_counts():
         # Here we call wrd similarity and dump user_query table
         if pattern:
             if wrd_sim_dump:
-                getWrdSimilarity(merged_recids, pattern, query_id, dump_folder)
+                getWrdSimilarity(merged_recids, pattern, query_id, only_wrd_sim_scores,dump_folder)
             if user_query_dump:
                 dump_user_query(dump_folder, user_ids[i], ip_addresses[i],
                                 query_id, dates[i], pattern, reclists[i])
-        task_sleep_now_if_required()
+#        task_sleep_now_if_required()
 
     write_message("Done Task 1/4: Processed user_query entries")
     task_update_progress("Done Task 1/4: Processed user_query entries")
 
     task_update_progress("Starting Task 2/4: Updating download counts")
     write_message("Starting Task 2/4: Updating download counts")
-    task_sleep_now_if_required()
+#    task_sleep_now_if_required()
     update_download_counts(last_runtime, until_date)
     write_message("Done Task 2/4: Updating download counts")
 
     task_update_progress("Starting Task 3/4: Updating page view counts")
     write_message("Starting Task 3/4: Updating page view counts")
-    task_sleep_now_if_required(can_stop_too=True)
+#    task_sleep_now_if_required()
     update_pageview_counts(last_runtime, until_date)
     write_message("Done Task 3/4: Updating page view counts")
 
     task_update_progress("Starting Task 4/4: Dumping ...")
     write_message("Starting Task 4/4: Dumping ...")
-    task_sleep_now_if_required(can_stop_too=True)
+#    task_sleep_now_if_required()
     if rnkUD_dump_type:
         dump_rnkusagedata(dump_folder, rnkUD_dump_type, dump_type)
     dump_bibrec(dump_folder, bibrec_dump, dump_type)
-    write_message("Done Task 4/4: Dumping.")
-    write_message("Done")
+    
+    task_sleep_now_if_required(can_stop_too=True)
     task_update_progress("Done")
+    write_message("Done Task 4/4: Dumping.")
+    write_message("Done")    
 
 #    endtime = datetime.datetime.now()
 #    total_time = endtime-startime
@@ -759,6 +798,8 @@ def main():
   -b, --bibrec=BR       Should we dump bibrec table (True) or not (False) [default=false]
   -q, --user-query=UQ   Should we dump user_query data (True) or not (False) [default=false]
   -w, --wrd-sim=WS      Should we dump word similarity data (True) or not (False) [default=false]
+  -W, --only-wrd-scores=OWS Should we dump only scores from word similarity (True) or not (False) [default=false]
+  
       --site-url=URL    Site URL, if analyzing imported logs [default=%s]
       --until=DATE      Analyze logs until given DATE (format YYYY-MM-DD)
 
@@ -766,9 +807,9 @@ Examples:
 Run periodically (for eg. weekly basis) and dump last changes from rnkUSAGEDATA:
    $ queryanalyzer --rnkUD-dump=2  -u admin -s 1d -L "Sunday 01:00-05:00"
 """ % (CFG_LOGDIR + '/drank_dumps', CFG_SITE_URL),
-              specific_params=("r:o:f:b:q:w:",
+              specific_params=("r:o:f:b:q:w:W:",
                                ["rnkUD-dump=", "output=", "type=", "bibrec=",
-                                "user-query=", "wrd-sim=", "site-url=", "until="]),
+                                "user-query=","wrd-sim=","only-wrd-scores=",  "site-url=", "until="]),
               task_submit_elaborate_specific_parameter_fnc = _dbdump_elaborate_submit_param,
               task_run_fnc = get_drank_counts)
 

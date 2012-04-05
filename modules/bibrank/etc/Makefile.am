@@ -32,20 +32,13 @@ etc_DATA = bibrankgkb.cfg \
            template_download_users.cfg \
            template_single_tag_rank_method.cfg \
            template_word_similarity.cfg \
-           template_enhanced_ranking.cfg \
-           template_logistic.cfg \
-           template_hirsch.cfg \
+           template_drank.cfg \
            template_freshness.cfg \
            template_view.cfg \
            template_display.cfg \
            template_download.cfg \
-		   enhanced_ranking.cfg \
-		   logistic.cfg \
-		   hirsch.cfg \
-		   freshness.cfg \
-		   view.cfg \
-		   display.cfg \
-		   download.cfg \  
+           template_seen.cfg \    
+           drank.cfg \
            wrd.cfg \
            citation.cfg \
            citerank_citation_t.cfg \
@@ -67,20 +60,13 @@ EXTRA_DIST = bibrankgkb.cfg.in \
              template_download_users.cfg \
              template_single_tag_rank_method.cfg.in \
              template_word_similarity.cfg \
-             template_enhanced_ranking.cfg \
-             template_logistic.cfg \
-             template_hirsch.cfg \
+             template_drank.cfg \
              template_freshness.cfg \
              template_view.cfg \
              template_display.cfg \
-             template_download.cfg \ 
-             enhanced_ranking.cfg \
-             logistic.cfg \
-             hirsch.cfg \
-             freshness.cfg \
-             view.cfg \
-             display.cfg \
-             download.cfg \                         
+             template_download.cfg \
+             template_seen.cfg \  
+             drank.cfg \      
              wrd.cfg \
              citation.cfg \
              citerank_citation_t.cfg \

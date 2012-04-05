@@ -2558,6 +2558,15 @@ CREATE TABLE IF NOT EXISTS rnkMETHODDATA (
   PRIMARY KEY  (id_rnkMETHOD)
 ) ENGINE=MyISAM;
 
+CREATE TABLE IF NOT EXISTS rnkDRANKLUT (
+  id mediumint(8) unsigned NOT NULL auto_increment,
+  drank_name varchar(255) NOT NULL,
+  drank_description varchar(255) NOT NULL,
+  drank_lut longblob,
+  last_updated timestamp default NOW(),
+  PRIMARY KEY id (id),
+  UNIQUE KEY drank_name (drank_name)
+) ENGINE=MyISAM;
 
 CREATE TABLE IF NOT EXISTS collection_rnkMETHOD (
   id_collection mediumint(9) unsigned NOT NULL,

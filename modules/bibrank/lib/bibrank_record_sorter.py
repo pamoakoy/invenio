@@ -25,7 +25,7 @@ import time
 import math
 import re
 import ConfigParser
-import copy
+import copy, os
 
 from invenio.config import \
      CFG_SITE_LANG, \
@@ -37,14 +37,14 @@ from invenio.bibindex_engine_stemmer import stem
 from invenio.bibindex_engine_stopwords import is_stopword
 from invenio.bibrank_citation_searcher import get_cited_by, get_cited_by_weight
 from invenio.intbitset import intbitset
-from invenio.bibrank_drank_sorter.py import rnkDict
+from invenio.bibrank_drank_sorter import rnkDict
 
 def rescale(recdict, rank_limit_relevance):
     """Rescale list so that values are between 0-100."""
     reclist = []
     divideby = max(recdict.values())
     for (j, w) in recdict.iteritems():
-        w = int(w * 100 / divideby)
+        w = round((w * 99 / divideby),2)
         if w >= rank_limit_relevance:
             reclist.append((j, w))
     return reclist
@@ -99,49 +99,70 @@ def create_rnkmethod_cache():
             config.readfp(open(file))
         except StandardError, e:
             pass
-
-        cfg_function = config.get("rank_method", "function")
-        if config.has_section(cfg_function):
-            methods[rank_method_code] = {}
-            methods[rank_method_code]["function"] = cfg_function
-            methods[rank_method_code]["prefix"] = config.get(cfg_function, "relevance_number_output_prologue")
-            methods[rank_method_code]["postfix"] = config.get(cfg_function, "relevance_number_output_epilogue")
-            methods[rank_method_code]["chars_alphanumericseparators"] = r"[1234567890\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]"
-        else:
-            raise Exception("Error in configuration file: %s" % (CFG_ETCDIR + "/bibrank/" + rank_method_code + ".cfg"))
-
-        i8n_names = run_sql("""SELECT ln,value from rnkMETHODNAME,rnkMETHOD where id_rnkMETHOD=rnkMETHOD.id and rnkMETHOD.name=%s""", (rank_method_code,))
-        for (ln, value) in i8n_names:
-            methods[rank_method_code][ln] = value
-
-        if config.has_option(cfg_function, "table"):
-            methods[rank_method_code]["rnkWORD_table"] = config.get(cfg_function, "table")
-            methods[rank_method_code]["col_size"] = run_sql("SELECT count(*) FROM %sR" % methods[rank_method_code]["rnkWORD_table"][:-1])[0][0]
-
-        if config.has_option(cfg_function, "stemming") and config.get(cfg_function, "stemming"):
+        if os.path.exists(file) and config.has_section("rank_method"):
+            cfg_function = config.get("rank_method", "function")
+            if config.has_section(cfg_function):
+                methods[rank_method_code] = {}
+                methods[rank_method_code]["function"] = cfg_function
+                methods[rank_method_code]["prefix"] = config.get(cfg_function, "relevance_number_output_prologue")
+                methods[rank_method_code]["postfix"] = config.get(cfg_function, "relevance_number_output_epilogue")
+                methods[rank_method_code]["chars_alphanumericseparators"] = r"[1234567890\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]"
+            else:
+                raise Exception("Error in configuration file: %s" % (CFG_ETCDIR + "/bibrank/" + rank_method_code + ".cfg"))
+    
+            i8n_names = run_sql("""SELECT ln,value from rnkMETHODNAME,rnkMETHOD where id_rnkMETHOD=rnkMETHOD.id and rnkMETHOD.name=%s""", (rank_method_code,))
+            for (ln, value) in i8n_names:
+                methods[rank_method_code][ln] = value
+    
+            if config.has_option(cfg_function, "table"):
+                methods[rank_method_code]["rnkWORD_table"] = config.get(cfg_function, "table")
+                methods[rank_method_code]["col_size"] = run_sql("SELECT count(*) FROM %sR" % methods[rank_method_code]["rnkWORD_table"][:-1])[0][0]           
+                               
+            if config.has_option("cfg_function", "stemming") and config.get(cfg_function, "stemming"):
+                try:
+                    methods[rank_method_code]["stemmer"] = config.get(cfg_function, "stemming")
+                except Exception,e:
+                    pass
+    
+            if config.has_option(cfg_function, "stopword"):
+                methods[rank_method_code]["stopwords"] = config.get(cfg_function, "stopword")
+    
+            if config.has_section("find_similar"):
+                methods[rank_method_code]["max_word_occurence"] = float(config.get("find_similar", "max_word_occurence"))
+                methods[rank_method_code]["min_word_occurence"] = float(config.get("find_similar", "min_word_occurence"))
+                methods[rank_method_code]["min_word_length"] = int(config.get("find_similar", "min_word_length"))
+                methods[rank_method_code]["min_nr_words_docs"] = int(config.get("find_similar", "min_nr_words_docs"))
+                methods[rank_method_code]["max_nr_words_upper"] = int(config.get("find_similar", "max_nr_words_upper"))
+                methods[rank_method_code]["max_nr_words_lower"] = int(config.get("find_similar", "max_nr_words_lower"))
+                methods[rank_method_code]["default_min_relevance"] = int(config.get("find_similar", "default_min_relevance"))
+    
+            if config.has_section("combine_method"):
+                i = 1
+                methods[rank_method_code]["combine_method"] = []
+                while config.has_option("combine_method", "method%s" % i):
+                    methods[rank_method_code]["combine_method"].append(string.split(config.get("combine_method", "method%s" % i), ","))
+                    i += 1
+                    
+            #Add drank-sorter specific option
             try:
-                methods[rank_method_code]["stemmer"] = config.get(cfg_function, "stemming")
+                
+                if config.has_option(cfg_function,"ranked_by"):
+                    methods[rank_method_code]["ranked_by"] = config.get(cfg_function, "ranked_by")
+                    
+                if config.has_option(cfg_function,"description"):
+                    methods[rank_method_code]["description"] = config.get(cfg_function, "description")
+                    
+                if config.has_option("drank_parameters","weight_of_relevance"):
+                    methods[rank_method_code]["weight_of_relevance"] = config.getfloat("drank_parameters", "weight_of_relevance")
+    
+                if config.has_option("drank_parameters","weight_of_exposed"):
+                    methods[rank_method_code]["weight_of_exposed"] = config.getfloat("drank_parameters", "weight_of_exposed")                   
+    
+                if config.has_option("drank_parameters","drank_lut_table"):
+                    methods[rank_method_code]["drank_lut_table"] = config.get("drank_parameters", "drank_lut_table")     
             except Exception,e:
-                pass
-
-        if config.has_option(cfg_function, "stopword"):
-            methods[rank_method_code]["stopwords"] = config.get(cfg_function, "stopword")
-
-        if config.has_section("find_similar"):
-            methods[rank_method_code]["max_word_occurence"] = float(config.get("find_similar", "max_word_occurence"))
-            methods[rank_method_code]["min_word_occurence"] = float(config.get("find_similar", "min_word_occurence"))
-            methods[rank_method_code]["min_word_length"] = int(config.get("find_similar", "min_word_length"))
-            methods[rank_method_code]["min_nr_words_docs"] = int(config.get("find_similar", "min_nr_words_docs"))
-            methods[rank_method_code]["max_nr_words_upper"] = int(config.get("find_similar", "max_nr_words_upper"))
-            methods[rank_method_code]["max_nr_words_lower"] = int(config.get("find_similar", "max_nr_words_lower"))
-            methods[rank_method_code]["default_min_relevance"] = int(config.get("find_similar", "default_min_relevance"))
-
-        if config.has_section("combine_method"):
-            i = 1
-            methods[rank_method_code]["combine_method"] = []
-            while config.has_option("combine_method", "method%s" % i):
-                methods[rank_method_code]["combine_method"].append(string.split(config.get("combine_method", "method%s" % i), ","))
-                i += 1
+                pass        
+                
 
 def is_method_valid(colID, rank_method_code):
     """
@@ -194,13 +215,13 @@ def ranked(_rnkdict, hitset):
     """"""
     rnkdict = rnkDict()
     rnkdict.loaddict(_rnkdict)
-    rnkdict.clean()
+    #rnkdict.clean()
  
     rnkdict.filter(list(hitset))
     result = (rnkdict.rank(),"(", ")", "")
     return result # rnkdict.rank()
 
-def rank_records(rank_method_code, rank_limit_relevance, hitset_global, pattern=[], verbose=0):
+def rank_records(rank_method_code, rank_limit_relevance, hitset_global, pattern=[], verbose=0, _rescale=1):
     """rank_method_code, e.g. `jif' or `sbr' (word frequency vector model)
        rank_limit_relevance, e.g. `23' for `nbc' (number of citations) or `0.10' for `vec'
        hitset, search engine hits;
@@ -231,9 +252,11 @@ def rank_records(rank_method_code, rank_limit_relevance, hitset_global, pattern=
         func_object = globals().get(function)
 
         if func_object and pattern and pattern[0][0:6] == "recid:" and function == "word_similarity":
-            result = find_similar(rank_method_code, pattern[0][6:], hitset, rank_limit_relevance, verbose)
-        elif rank_method_code == "download":
-            result = ranked(rank_method_code, hitset)
+            result = find_similar(rank_method_code, pattern[0][6:], hitset, rank_limit_relevance, verbose,_rescale)        
+        elif func_object and function == "distributed_ranking":
+            result=distributed_ranking(rank_method_code,pattern , hitset, rank_limit_relevance,9,0)    
+#        elif rank_method_code == "qr":
+#            result = ranked(rank_method_code, hitset)
         elif rank_method_code == "citation":
             #we get rank_method_code correctly here. pattern[0] is the search word - not used by find_cit
             p = ""
@@ -241,6 +264,8 @@ def rank_records(rank_method_code, rank_limit_relevance, hitset_global, pattern=
                 p = pattern[0][6:]
             result = find_citations(rank_method_code, p, hitset, verbose)
 
+        elif func_object and function == "word_similarity":
+            result=func_object(rank_method_code, pattern, hitset, rank_limit_relevance, verbose,_rescale)
         elif func_object:
             result = func_object(rank_method_code, pattern, hitset, rank_limit_relevance, verbose)
         else:
@@ -409,7 +434,7 @@ def find_citations(rank_method_code, recID, hitset, verbose):
     else:
         return ((),"", "", "")
 
-def find_similar(rank_method_code, recID, hitset, rank_limit_relevance,verbose):
+def find_similar(rank_method_code, recID, hitset, rank_limit_relevance,verbose,_rescale=1):
     """Finding terms to use for calculating similarity. Terms are taken from the recid given, returns a list of recids's and relevance,
     input:
     rank_method_code - the code of the method, from the name field in rnkMETHOD
@@ -470,7 +495,7 @@ def find_similar(rank_method_code, recID, hitset, rank_limit_relevance,verbose):
     if len(recdict) == 0 or len(lwords) == 0:
         return (None, "Could not find any similar documents, possibly because of error in ranking data.", "", voutput)
     else: #sort if we got something to sort
-        (reclist, hitset) = sort_record_relevance_findsimilar(recdict, rec_termcount, hitset, rank_limit_relevance, verbose)
+        (reclist, hitset) = sort_record_relevance_findsimilar(recdict,rec_termcount, hitset, rank_limit_relevance, verbose,_rescale)
 
     if verbose > 0:
         voutput += "<br />Number of terms: %s<br />" % run_sql("SELECT count(id) FROM %s" % methods[rank_method_code]["rnkWORD_table"])[0][0]
@@ -483,14 +508,16 @@ def find_similar(rank_method_code, recID, hitset, rank_limit_relevance,verbose):
 
     return (reclist[:len(reclist)], methods[rank_method_code]["prefix"], methods[rank_method_code]["postfix"], voutput)
 
-def enhanced_ranking(rank_method_code, lwords, hitset, rank_limit_relevance, verbose):
-    """Ranking a records containing specified words and returns a sorted list.
+def distributed_ranking(rank_method_code, lwords, hitset, rank_limit_relevance,verbose=0,_rescale=0):
+    """Ranking records containing specified words(word similarity) and merging scores with quality scores.
+    And returns a sorted list.
     input:
     rank_method_code - the code of the method, from the name field in rnkMETHOD
     lwords - a list of words from the query
     hitset - a list of hits for the query found by search_engine
     rank_limit_relevance - show only records with a rank value above this
     verbose - verbose value
+    _rescale- rescale scores to stay within 0 and 100
     output:
     reclist - a list of sorted records: [[23, 34], [344, 24], [1, 01]]
     prefix - what to show before the rank value
@@ -501,7 +528,7 @@ def enhanced_ranking(rank_method_code, lwords, hitset, rank_limit_relevance, ver
     startCreate = time.time()
 
     if verbose > 0:
-        voutput += "<br />Running rank method: %s, using word_frequency function in bibrank_record_sorter<br />" % rank_method_code
+        voutput += "<br />Running rank method: %s, using distributed ranking function in bibrank_record_sorter<br />" % rank_method_code
  
     lwords_old = lwords
     lwords = []
@@ -526,40 +553,71 @@ def enhanced_ranking(rank_method_code, lwords, hitset, rank_limit_relevance, ver
             term_recs = deserialize_via_marshal(term_recs[0][1])
             (recdict, rec_termcount) = calculate_record_relevance((term, int(term_recs["Gi"][1])) , term_recs, hitset, recdict, rec_termcount, verbose, quick=None)
             del term_recs
+ 
+    if methods[rank_method_code]["ranked_by"]:        
+        ranked_by=methods[rank_method_code]["ranked_by"]
+        if verbose > 0:
+            voutput += "<br />DRANK method: %s <br />" %methods[rank_method_code]["description"]
+        if recdict:
+            wrd_sim = rnkDict()
+            wrd_sim.put(recdict)
+            wrd_sim_lookup=rnkDict()
+            wrd_sim_lookup.loadlut(ranked_by+"_wrd")
+            
+            relevance=rnkDict()
+            relevance.lookup_in_lut(wrd_sim_lookup.getdict(), wrd_sim.getdict())
+                        
+            quality  = rnkDict()
+            quality.loaddict(ranked_by)
+            quality.filter(list(hitset))
 
-    rnkdict_ = rnkDict()
-    rnkdict_.put(recdict)
-    rnkdict  = rnkDict()
-    rnkdict.loaddict("logistic")
-    rnkmerge = rnkDict()
-#    rnkmerge.merge(rnkdict_, rnkdict, [0, 0.1, 0.1])
-    rnklist = []
-    rnklist.append(rnkdict_.getdict())
-    rnklist.append(rnkdict.getdict())
-    rnkmerge.octopus(rnklist, [0.5, 0.00001, 0.9999])
-    recdict = rnkmerge.getdict()
+            fresh  = rnkDict()
+            fresh.loaddict(ranked_by+"_freshness")
+            fresh.filter(list(hitset))            
+            
+            fresh_quality_list=[]
+            fresh_quality_list.append(fresh.getdict())
+            fresh_quality_list.append(quality.getdict())
+#             = rnkDict()
 
-    if len(recdict) == 0 or (len(lwords) == 1 and lwords[0] == ""):
-        return (None, "Records not ranked. The query is not detailed enough, or not enough records found, for ranking to be possible.", "", voutput)
-    else: #sort if we got something to sort
-        (reclist, hitset) = sort_record_relevance(recdict, hitset, rank_limit_relevance, _rescale=0, verbose=0)
+            fresh_quality=rnkDict()
+            fresh_quality.octopus(fresh_quality_list, [0.5,1-methods[rank_method_code]["weight_of_exposed"],methods[rank_method_code]["weight_of_exposed"]])
+       
+            quality_relevance = rnkDict()
+        #    r
+            quality_relevance_list = []
+            quality_relevance_list.append(relevance.getdict())
+            quality_relevance_list.append(fresh_quality.getdict())
+      
+            quality_relevance.octopus(quality_relevance_list, [0.5,1- methods[rank_method_code]["weight_of_relevance"],methods[rank_method_code]["weight_of_relevance"]])
+     
+            recdict = quality_relevance.getdict()
+    
+            if len(recdict) == 0 or (len(lwords) == 1 and lwords[0] == ""):
+                return (None, "Records not ranked. The query is not detailed enough, or not enough records found, for ranking to be possible.", "", voutput)
+            else: #sort if we got something to sort
+                (reclist, hitset) = sort_record_relevance(recdict, hitset, rank_limit_relevance, verbose,_rescale=1)
+        
+            #Add any documents not ranked to the end of the list
+            if hitset:
+                lrecIDs = list(hitset)                       #using 2-3mb
+                reclist = zip(lrecIDs, [0] * len(lrecIDs)) + reclist      #using 6mb
+        
+            if verbose > 0:
+                voutput += "<br />Current number of recIDs: %s<br />" % (methods[rank_method_code]["col_size"])
+                voutput += "Number of terms: %s<br />" % run_sql("SELECT count(id) FROM %s" % methods[rank_method_code]["rnkWORD_table"])[0][0]
+                voutput += "Terms: %s<br />" % lwords
+                voutput += "Prepare and pre calculate time: %s<br />" % (str(time.time() - startCreate))
+                voutput += "Total time used: %s<br />" % (str(time.time() - startCreate))
+                rank_method_stat(ranked_by,reclist, lwords)
+        
+            return (reclist, methods[rank_method_code]["prefix"], methods[rank_method_code]["postfix"], voutput)
+        else:
+            return (None, "Records not ranked. No DRANK Method defined.", "", voutput)
 
-    #Add any documents not ranked to the end of the list
-    if hitset:
-        lrecIDs = list(hitset)                       #using 2-3mb
-        reclist = zip(lrecIDs, [0] * len(lrecIDs)) + reclist      #using 6mb
+        
 
-    if verbose > 0:
-        voutput += "<br />Current number of recIDs: %s<br />" % (methods[rank_method_code]["col_size"])
-        voutput += "Number of terms: %s<br />" % run_sql("SELECT count(id) FROM %s" % methods[rank_method_code]["rnkWORD_table"])[0][0]
-        voutput += "Terms: %s<br />" % lwords
-        voutput += "Prepare and pre calculate time: %s<br />" % (str(time.time() - startCreate))
-        voutput += "Total time used: %s<br />" % (str(time.time() - startCreate))
-        rank_method_stat(reclist, lwords)
-
-    return (reclist, methods[rank_method_code]["prefix"], methods[rank_method_code]["postfix"], voutput)
-
-def word_similarity(rank_method_code, lwords, hitset, rank_limit_relevance, verbose):
+def word_similarity(rank_method_code, lwords, hitset, rank_limit_relevance,verbose=0, _rescale=1):
     """Ranking a records containing specified words and returns a sorted list.
     input:
     rank_method_code - the code of the method, from the name field in rnkMETHOD
@@ -606,7 +664,7 @@ def word_similarity(rank_method_code, lwords, hitset, rank_limit_relevance, verb
     if len(recdict) == 0 or (len(lwords) == 1 and lwords[0] == ""):
         return (None, "Records not ranked. The query is not detailed enough, or not enough records found, for ranking to be possible.", "", voutput)
     else: #sort if we got something to sort
-        (reclist, hitset) = sort_record_relevance(recdict, rec_termcount, hitset, rank_limit_relevance, verbose)
+        (reclist, hitset) = sort_record_relevance(recdict, hitset, rank_limit_relevance, verbose, _rescale)
 
     #Add any documents not ranked to the end of the list
     if hitset:
@@ -693,7 +751,7 @@ def calculate_record_relevance_findsimilar(term, invidx, hitset, recdict, rec_te
 
     return (recdict, rec_termcount)
 
-def sort_record_relevance(recdict, hitset, rank_limit_relevance, _rescale=0, verbose=0):
+def sort_record_relevance(recdict, hitset, rank_limit_relevance,verbose=0, _rescale=0):
     """Sorts the dictionary and returns records with a relevance higher than the given value.
     recdict - {recid: value} unsorted
     rank_limit_relevance - a value > 0 usually
@@ -720,7 +778,7 @@ def sort_record_relevance(recdict, hitset, rank_limit_relevance, _rescale=0, ver
         voutput += "Sort time: %s<br />" % (str(time.time() - startCreate))
     return (reclist, hitset)
 
-def sort_record_relevance_findsimilar(recdict, rec_termcount, hitset, rank_limit_relevance, verbose):
+def sort_record_relevance_findsimilar(recdict, rec_termcount, hitset, rank_limit_relevance, verbose,_rescale=0):
     """Sorts the dictionary and returns records with a relevance higher than the given value.
     recdict - {recid: value} unsorted
     rank_limit_relevance - a value > 0 usually
@@ -739,11 +797,8 @@ def sort_record_relevance_findsimilar(recdict, rec_termcount, hitset, rank_limit
 
     hitset -= recdict.keys()
     #gives each record a score between 0-100
-    divideby = max(recdict.values())
-    for (j, w) in recdict.iteritems():
-        w = int(w * 100 / divideby)
-        if w >= rank_limit_relevance:
-            reclist.append((j, w))
+    if _rescale:
+        reclist = rescale(recdict, rank_limit_relevance)
 
     #sort scores
     reclist.sort(lambda x, y: cmp(x[1], y[1]))
@@ -791,7 +846,7 @@ try:
     psyco.bind(find_similar)
     psyco.bind(rank_by_method)
     psyco.bind(calculate_record_relevance)
-    psyco.bind(enhanced_ranking)
+    psyco.bind(distributed_ranking)
     psyco.bind(word_similarity)
     psyco.bind(sort_record_relevance)
 except StandardError, e:
